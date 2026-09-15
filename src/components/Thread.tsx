@@ -61,7 +61,8 @@ export function AssistantMessage({ time, children }: { time?: React.ReactNode; c
 				>
 					<Sparkles className="size-3 text-[var(--accent)]" />
 				</div>
-				<span className="text-[12px] font-semibold">RomushaiPRD</span>
+				<span className="text-[12px] font-semibold text-[var(--fg)]">Romushai</span>
+				<span className="text-[12px] font-semibold text-[var(--wordmark-accent)]">PRD</span>
 				{time && <time className="ml-auto text-[11px] tabular-nums text-[var(--fg-faint)]">{time}</time>}
 			</div>
 			{children}
