@@ -15,11 +15,11 @@ const STAGE_NAMES: Record<number, string> = {
 	1: "Langkah 1: Analisis Kebutuhan Secara Mendalam dan Komprehensif",
 	2: "Langkah 2: Pengambilan Skill dan Kapabilitas Agent yang Relevan",
 	3: "Langkah 3: Penulisan Draf Dokumen",
-	4: "Langkah 3: Penyusunan Task List",
-	5: "Langkah 4: Verifikasi Kesesuaian Dokumen dengan Kebutuhan Pengguna",
-	6: "Langkah 5: Audit Red-Team oleh Agent Hacker",
-	7: "Langkah 6: Perbaikan Kesenjangan dan Kelemahan",
-	8: "Langkah 7: Finalisasi Dokumen",
+	4: "Langkah 4: Penyusunan Task List",
+	5: "Langkah 5: Verifikasi Kesesuaian Dokumen dengan Kebutuhan Pengguna",
+	6: "Langkah 6: Audit Red-Team oleh Agent Hacker",
+	7: "Langkah 7: Perbaikan Kesenjangan dan Kelemahan",
+	8: "Langkah 8: Finalisasi Dokumen",
 };
 
 export function UserBubble({ text }: { text: string }) {
@@ -319,7 +319,7 @@ export function ThreadView(props: ThreadViewProps) {
 							<pre className="whitespace-pre-wrap font-sans text-[13px] leading-5">{shownAssistant.text}</pre>
 						))}
 					{showStream && streaming && (
-						<div className="mt-1">
+						<div className="mt-4">
 							<p className="inline-flex items-center gap-1.5 rounded-[var(--radius-md)] border border-[var(--accent-ring)] bg-[var(--accent-soft)] px-2.5 py-1 text-[13px] leading-5">
 								{busy ? "Sedang menulis" : "Selesai menulis"} <span className="font-mono text-[12px]">{docFileName(streaming.doc)}</span>
 								{busy && (
