@@ -2,7 +2,6 @@
 
 import { Plus, History, Home } from "lucide-react";
 import { LogoMark, Wordmark } from "./BrandLogo";
-import { ThemeToggle } from "./ThemeToggle";
 import Link from "next/link";
 
 export function ThreadHeaderV2({ subBrand, historyCount, hasContent, isDark, historyOpen, onOpenHistory, onNewChat, onToggleTheme }: { subBrand: string; historyCount: number; hasContent: boolean; isDark: boolean | null; historyOpen: boolean; onOpenHistory: () => void; onNewChat: () => void; onToggleTheme: () => void }) {
@@ -50,10 +49,6 @@ export function ThreadHeaderV2({ subBrand, historyCount, hasContent, isDark, his
 					<span className="hidden sm:inline">Riwayat</span>
 					{historyCount > 0 && <span className="rounded-[var(--radius-md)] bg-[var(--bg-subtle)] px-1.5 py-0.5 text-[10px] tabular-nums text-[var(--fg-muted)]">{historyCount}</span>}
 				</button>
-				<ThemeToggle
-					isDark={isDark}
-					onToggle={onToggleTheme}
-				/>
 				<Link
 					href="/"
 					aria-label="Kembali ke beranda"

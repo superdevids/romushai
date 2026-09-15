@@ -2,9 +2,12 @@ import type { NextConfig } from "next";
 
 // CSP ketat tanpa memecah app: 'unsafe-inline' diperlukan karena Next menyuntik
 // script theme inline di layout.tsx.
+// 'unsafe-eval' diperlukan untuk React dev mode/Turbopack (eval untuk rekonstruksi
+// stack); di production React tidak memakai eval sehingga tidak ada dampak runtime,
+// hanya pelonggaran header.
 const CSP = [
   "default-src 'self'",
-  "script-src 'self' 'unsafe-inline'",
+  "script-src 'self' 'unsafe-inline' 'unsafe-eval'",
   "style-src 'self' 'unsafe-inline'",
   "img-src 'self' data: blob:",
   "font-src 'self' data:",

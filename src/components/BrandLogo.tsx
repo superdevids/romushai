@@ -69,7 +69,7 @@ export function LogoMark({ size }: { size: number }) {
 }
 
 export function Wordmark({ size, onClick, subBrand }: { size: "header" | "hero"; onClick?: () => void; subBrand: string }) {
-	const cls = `items-baseline gap-0.5 leading-none tracking-[-0.03em] ${size === "hero" ? "text-[34px] sm:text-[44px]" : "text-lg"}`;
+	const cls = `items-baseline leading-none tracking-[-0.03em] ${size === "hero" ? "text-[34px] sm:text-[44px]" : "text-lg"}`;
 	const inner = (
 		<>
 			<span className="font-extrabold text-[var(--fg)]">{subBrand === "" ? "Romush" : BRAND}</span>
@@ -77,11 +77,7 @@ export function Wordmark({ size, onClick, subBrand }: { size: "header" | "hero";
 		</>
 	);
 	if (!onClick) {
-		return (
-			<span className={`flex ${cls}`}>
-				{inner}
-			</span>
-		);
+		return <span className={`flex ${cls}`}>{inner}</span>;
 	}
 	return (
 		<button
