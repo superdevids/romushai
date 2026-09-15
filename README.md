@@ -1,36 +1,55 @@
-This is a [Next.js](https://nextjs.org) project bootstrapped with [`create-next-app`](https://nextjs.org/docs/app/api-reference/cli/create-next-app).
+# PRD Generator
 
-## Getting Started
+Aplikasi Next.js: ketik ide project - sistem menghasilkan **paket dokumen markdown** (Bahasa Indonesia): master PRD, dokumen teknis pilihan (API-TECH, WEB-REFERENCE, UIUX-SPEC, DATABASE, dsb.) + TASK-LIST. Tanpa autentikasi, publik, streaming langsung (SSE).
 
-First, run the development server:
+## Route
 
-```bash
-npm run dev
-# or
-yarn dev
-# or
-pnpm dev
-# or
-bun dev
-```
+| Route | Keterangan |
+| --- | --- |
+| `/` | Landing page: ringkasan produk + tombol menuju generator. |
+| `/prd` | Generator PRD: composer, klarifikasi, stream dokumen, preview, riwayat. |
 
-Open [http://localhost:3000](http://localhost:3000) with your browser to see the result.
+## Setup
 
-You can start editing the page by modifying `app/page.tsx`. The page auto-updates as you edit the file.
+1. `cp .env.example .env` lalu isi `LLM_API_KEY`. Wajib.
+2. `npm run dev` - buka http://localhost:3000/prd
 
-This project uses [`next/font`](https://nextjs.org/docs/app/building-your-application/optimizing/fonts) to automatically optimize and load [Geist](https://vercel.com/font), a new font family for Vercel.
+Variabel env (server-only, tanpa prefix `NEXT_PUBLIC_`):
 
-## Learn More
+| Variabel | Default | Keterangan |
+| --- | --- | --- |
+| `LLM_API_KEY` | - (wajib) | API key penyedia OpenAI-compatible |
+| `LLM_BASE_URL` | `https://api.openai.com/v1` | Dasar URL API (harus berakhir `/v1`) |
+| `LLM_MODEL_SMALL` | `gpt-4o-mini` | Tahap scope & rekomendasi dokumen |
+| `LLM_MODEL_STRONG` | `gpt-4o` | Tahap menulis dokumen & task list |
+| `LLM_TIMEOUT_MS` | `300000` | Timeout per panggilan model (inactivity-based, di-reset saat ada chunk) |
+| `LLM_TOTAL_TIMEOUT_MS` | `900000` | Deadline absolut satu panggilan model |
+| `HEALTH_TOKEN` | - (kosong) | Token untuk detail GET `/api/health`; kosong = mode terbuka |
+| `TRUSTED_PROXY_COUNT` | `1` | Jumlah proxy tepercaya untuk memilih entri `x-forwarded-for` |
+| `MEMORY_PATH` | `.memory/agent-memory.json` | Lokasi memori kemampuan agent (server-only) |
+| `MEMORY_MAX_RECORDS` | `2000` | Batas entri memori setelah prune LRU |
+| `MEMORY_MAX_AGE_DAYS` | `120` | Umur maksimum entri memori (hari) |
 
-To learn more about Next.js, take a look at the following resources:
+## API
 
-- [Next.js Documentation](https://nextjs.org/docs) - learn about Next.js features and API.
-- [Learn Next.js](https://nextjs.org/learn) - an interactive Next.js tutorial.
+- `POST /api/clarify` `{ idea }` - pertanyaan klarifikasi terstruktur sebelum generate.
+- `POST /api/generate` `{ idea, answers? }` - SSE pipeline **9 stage (stage 0-8)**; UI menampilkannya sebagai **7 langkah** (`stage_start`, `chunk`, `stage_end`, `error`, `done`).
+- `POST /api/regenerate-doc` `{ idea, scope, doc, docs? }` - SSE regenerate satu dokumen (stateless).
+- `GET /api/health` - status konfigurasi; detail hanya bila `HEALTH_TOKEN` cocok.
+- Validasi: idea 1-2000 karakter (400). Rate limit in-memory per IP (BETA): generate burst 5 / isi 3 per menit; regenerate 10 per menit - 429 + `Retry-After`.
+- Retry 2x (backoff 1s/2s) untuk timeout 60s/stage, HTTP 5xx, JSON rekomendasi tidak valid. 401/403/429 penyedia = fatal.
 
-You can check out [the Next.js GitHub repository](https://github.com/vercel/next.js) - your feedback and contributions are welcome!
+## Catatan teknis
 
-## Deploy on Vercel
+- Satu codepath OpenAI-compatible (plain fetch, tanpa SDK). **Ollama tidak didukung** - butuh mode kompatibilitas berbeda.
+- Rate limit **in-memory per instance** - upgrade ke Upstash Redis bila deploy multi-instance.
+- Riwayat tersimpan di `localStorage` per browser/device.
+- Tema default **gelap**; pilihan pengguna disimpan di `localStorage` (`aiprd-theme`).
 
-The easiest way to deploy your Next.js app is to use the [Vercel Platform](https://vercel.com/new?utm_medium=default-template&filter=next.js&utm_source=create-next-app&utm_campaign=create-next-app-readme) from the creators of Next.js.
+## Scripts
 
-Check out our [Next.js deployment documentation](https://nextjs.org/docs/app/building-your-application/deploying) for more details.
+- `npm run dev` / `npm run build` / `npm run start`
+- `npm run lint`
+- `npm run typecheck` (tsc --noEmit)
+
+Catatan: script `npm test` dan `npm run gen:knowledge` **belum tersedia**. Keduanya pernah menunjuk berkas di folder `scripts/` (`self-check.test.ts`, `extract-knowledge.ts`) yang saat ini tidak ada di repositori, jadi entri tersebut dihapus agar `package.json` tidak menyesatkan. Tambahkan kembali bila berkasnya sudah dipulihkan.

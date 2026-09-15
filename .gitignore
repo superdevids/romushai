@@ -39,3 +39,10 @@ yarn-error.log*
 # typescript
 *.tsbuildinfo
 next-env.d.ts
+
+# agent memory (runtime, jangan di-commit) - termasuk backup *.backup.json
+/.memory/
+
+# build/verification logs
+build-out.log
+*.log

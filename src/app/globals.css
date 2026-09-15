@@ -1,26 +1,248 @@
 @import "tailwindcss";
+@plugin "@tailwindcss/typography";
 
-:root {
-  --background: #ffffff;
-  --foreground: #171717;
-}
-
-@theme inline {
-  --color-background: var(--background);
-  --color-foreground: var(--foreground);
-  --font-sans: var(--font-geist-sans);
-  --font-mono: var(--font-geist-mono);
-}
-
-@media (prefers-color-scheme: dark) {
-  :root {
-    --background: #0a0a0a;
-    --foreground: #ededed;
+@layer base {
+  textarea {
+    @apply border-0 outline-none ring-0 shadow-none;
   }
 }
 
+:root,
+html[data-theme="light"] {
+  --bg: #FBF8F4;
+  --bg-subtle: #F3EEE7;
+  --surface: #FFFFFF;
+  --surface-hover: #F7F1E9;
+  --surface-raised: #FFFFFF;
+  --border: #E8DED1;
+  --border-strong: #D8C9B6;
+  --fg: #1C1917;
+  --fg-muted: #57534E;
+  --fg-faint: #6B655E;
+  --accent: #F97316;
+  --accent-600: #EA580C;
+  --accent-700: #C2410C;
+  --on-accent: #1A140F;
+  --accent-soft: #FFF3E7;
+  --accent-ring: #F9A96B;
+  --accent-focus: #FF8C4D;
+  --hero-glow: #FFE6CB;
+  --border-input: #B7AC9C;
+  --logo-spark: #FFFFFF;
+  --wordmark-accent: #B8401A;
+  --success: #0F7B4A;
+  --success-soft: #E6F3EA;
+  --warn: #8F5E10;
+  --warn-soft: #FFF6DE;
+  --danger: #C0392B;
+  --danger-soft: #FDEBE7;
+  --radius-md: 10px;
+  --radius-xl: 16px;
+  --shadow-sm: 0 1px 2px rgba(28, 25, 23, .05), 0 4px 16px rgba(28, 25, 23, .06);
+  --shadow-md: 0 4px 16px rgba(28, 25, 23, .09), 0 1px 3px rgba(28, 25, 23, .07);
+  --dur-fast: 150ms;
+  --dur-med: 220ms;
+  --ease: cubic-bezier(.2, .8, .2, 1);
+}
+
+/* User explicitly picked light: media dark must never override it. */
+@media (prefers-color-scheme: dark) {
+  :root:not(html[data-theme="light"]) {
+    --bg: #1A1410;
+    --bg-subtle: #221B15;
+    --surface: #251F1A;
+    --surface-hover: #2D251E;
+    --surface-raised: #332B23;
+    --border: #3D352F;
+    --border-strong: #4C443D;
+    --fg: #FAF5F0;
+    --fg-muted: #A8A29E;
+    --fg-faint: #8F867D;
+    --accent: #FB923C;
+    --accent-600: #F97316;
+    --accent-700: #FDBA74;
+    --on-accent: #1A140F;
+    --accent-soft: #33211A;
+    --accent-ring: #6B4324;
+    --accent-focus: #FF9A5F;
+    --hero-glow: #3A2112;
+    --border-input: #453C34;
+    --logo-spark: #FFE0C7;
+    --wordmark-accent: #FF8C62;
+    --success: #2FCB7A;
+    --success-soft: #10291C;
+    --warn: #E0B040;
+    --warn-soft: #2A2210;
+    --danger: #F28B82;
+    --danger-soft: #2E1A18;
+    --shadow-sm: 0 1px 2px rgba(0, 0, 0, .4);
+    --shadow-md: 0 8px 32px rgba(0, 0, 0, .5);
+  }
+}
+
+/* User explicitly picked dark on a light-system: dark must win. */
+@media (prefers-color-scheme: light) {
+  html[data-theme="dark"] {
+    --bg: #1A1410;
+    --bg-subtle: #221B15;
+    --surface: #251F1A;
+    --surface-hover: #2D251E;
+    --surface-raised: #332B23;
+    --border: #3D352F;
+    --border-strong: #4C443D;
+    --fg: #FAF5F0;
+    --fg-muted: #A8A29E;
+    --fg-faint: #8F867D;
+    --accent: #FB923C;
+    --accent-600: #F97316;
+    --accent-700: #FDBA74;
+    --on-accent: #1A140F;
+    --accent-soft: #33211A;
+    --accent-ring: #6B4324;
+    --accent-focus: #FF9A5F;
+    --hero-glow: #3A2112;
+    --border-input: #453C34;
+    --logo-spark: #FFE0C7;
+    --wordmark-accent: #FF8C62;
+    --success: #2FCB7A;
+    --success-soft: #10291C;
+    --warn: #E0B040;
+    --warn-soft: #2A2210;
+    --danger: #F28B82;
+    --danger-soft: #2E1A18;
+    --shadow-sm: 0 1px 2px rgba(0, 0, 0, .4);
+    --shadow-md: 0 8px 32px rgba(0, 0, 0, .5);
+  }
+}
+
+/* Tailwind v4: drive dark: variants (prose-invert) from .dark class, not system. */
+@custom-variant dark (&:where(.dark, .dark *));
+
+@keyframes logoBob {
+  0%, 100% {
+    transform: translateY(0);
+  }
+
+  50% {
+    transform: translateY(-3px);
+  }
+}
+
+@keyframes twinkle {
+  0%, 100% {
+    opacity: 1;
+  }
+
+  50% {
+    opacity: 0.35;
+  }
+}
+
+.logo-bob {
+  animation: logoBob 5s ease-in-out infinite;
+}
+
+.twinkle {
+  animation: twinkle 2.4s ease-in-out infinite;
+  transform-origin: center;
+}
+
+@theme inline {
+  --font-sans: var(--font-jakarta), ui-sans-serif, system-ui, sans-serif;
+  --font-mono: var(--font-jetbrains), ui-monospace, monospace;
+}
+
 body {
-  background: var(--background);
-  color: var(--foreground);
-  font-family: Arial, Helvetica, sans-serif;
+  background: var(--bg);
+  color: var(--fg);
+  font-family: var(--font-sans);
+  transition: background var(--dur-med) var(--ease), color var(--dur-med) var(--ease);
+}
+
+:focus-visible {
+  outline: 2px solid var(--accent-focus);
+  outline-offset: 2px;
+}
+
+button:not(:disabled),
+[role="button"]:not(:disabled),
+a {
+  cursor: pointer;
+}
+
+button:disabled,
+[role="button"][aria-disabled="true"] {
+  cursor: not-allowed;
+}
+
+.scrollbar-none {
+  scrollbar-width: none;
+}
+
+.scrollbar-none::-webkit-scrollbar {
+  display: none;
+}
+
+.idea-scrollbar {
+  scrollbar-width: none;
+}
+
+.idea-scrollbar::-webkit-scrollbar {
+  display: none;
+}
+
+.themed-scrollbar {
+  scrollbar-width: thin;
+  scrollbar-color: var(--border-strong) transparent;
+  overscroll-behavior: contain;
+  scroll-behavior: auto;
+}
+
+.themed-scrollbar::-webkit-scrollbar {
+  width: 10px;
+}
+
+.themed-scrollbar::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+.themed-scrollbar::-webkit-scrollbar-thumb {
+  background: var(--border-strong);
+  border-radius: 999px;
+  border: 3px solid transparent;
+  background-clip: content-box;
+}
+
+.themed-scrollbar::-webkit-scrollbar-thumb:hover {
+  background: var(--fg-faint);
+  background-clip: content-box;
+}
+
+.themed-scrollbar::-webkit-scrollbar-corner {
+  background: transparent;
+}
+
+/* Ambient background grid: 1px hairlines in both axes, layered under content.
+   Uses --fg at very low alpha via color-mix so it adapts to light/dark themes
+   without hardcoded colors. `-webkit-mask-image` needs its own gradient copy. */
+.landing-grid {
+  background-image:
+    linear-gradient(to right,
+      color-mix(in srgb, var(--fg) 4%, transparent) 0 1px,
+      transparent 1px 100%),
+    linear-gradient(to bottom,
+      color-mix(in srgb, var(--fg) 4%, transparent) 0 1px,
+      transparent 1px 100%);
+  background-size: 32px 32px;
+  background-position: center top;
+  -webkit-mask-image: radial-gradient(120% 100% at 50% 0%, rgb(0 0 0) 0%, rgb(0 0 0 / 0.6) 45%, transparent 100%);
+  mask-image: radial-gradient(120% 100% at 50% 0%, rgb(0 0 0) 0%, rgb(0 0 0 / 0.6) 45%, transparent 100%);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after {
+    animation-duration: .01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: .01ms !important;
+  }
 }

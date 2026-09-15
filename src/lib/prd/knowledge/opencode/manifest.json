@@ -1,0 +1,20 @@
+{
+  "generatedAt": "2026-09-14T11:58:44.508Z",
+  "source": "C:\\Users\\HP\\Documents\\opencode.bak",
+  "perPart": 60,
+  "dryRun": false,
+  "agents": {
+    "scanned": 1150,
+    "kept": 1137,
+    "skipped": 13,
+    "fallbackDescription": 73,
+    "parts": 19
+  },
+  "skills": {
+    "scanned": 1333,
+    "kept": 1277,
+    "skipped": 56,
+    "fallbackDescription": 18,
+    "parts": 22
+  }
+}

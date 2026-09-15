@@ -1,0 +1,419 @@
+{
+  "count": 69,
+  "rows": [
+    {
+      "kind": "agent",
+      "name": "senior-customer-insights-manager",
+      "reason": "duplicate-in-source",
+      "source": "subagents\\senior-customer-insights-manager.md"
+    },
+    {
+      "kind": "skill",
+      "name": "banner-design",
+      "reason": "duplicate-in-source",
+      "source": "skills\\ui-ux-pro-max\\cli\\assets\\skills\\banner-design\\SKILL.md"
+    },
+    {
+      "kind": "skill",
+      "name": "brand",
+      "reason": "duplicate-in-source",
+      "source": "skills\\ui-ux-pro-max\\cli\\assets\\skills\\brand\\SKILL.md"
+    },
+    {
+      "kind": "skill",
+      "name": "design",
+      "reason": "duplicate-in-source",
+      "source": "skills\\ui-ux-pro-max\\cli\\assets\\skills\\design\\SKILL.md"
+    },
+    {
+      "kind": "skill",
+      "name": "design-system",
+      "reason": "duplicate-in-source",
+      "source": "skills\\ui-ux-pro-max\\cli\\assets\\skills\\design-system\\SKILL.md"
+    },
+    {
+      "kind": "skill",
+      "name": "slides",
+      "reason": "duplicate-in-source",
+      "source": "skills\\ui-ux-pro-max\\cli\\assets\\skills\\slides\\SKILL.md"
+    },
+    {
+      "kind": "skill",
+      "name": "ui-styling",
+      "reason": "duplicate-in-source",
+      "source": "skills\\ui-ux-pro-max\\cli\\assets\\skills\\ui-styling\\SKILL.md"
+    },
+    {
+      "kind": "agent",
+      "name": "chief-of-staff",
+      "reason": "duplicate-vs-ecc",
+      "source": ""
+    },
+    {
+      "kind": "agent",
+      "name": "agent-evaluator",
+      "reason": "duplicate-vs-ecc",
+      "source": ""
+    },
+    {
+      "kind": "agent",
+      "name": "build-error-resolver",
+      "reason": "duplicate-vs-ecc",
+      "source": ""
+    },
+    {
+      "kind": "agent",
+      "name": "code-architect",
+      "reason": "duplicate-vs-ecc",
+      "source": ""
+    },
+    {
+      "kind": "agent",
+      "name": "code-explorer",
+      "reason": "duplicate-vs-ecc",
+      "source": ""
+    },
+    {
+      "kind": "agent",
+      "name": "code-reviewer",
+      "reason": "duplicate-vs-ecc",
+      "source": ""
+    },
+    {
+      "kind": "agent",
+      "name": "doc-updater",
+      "reason": "duplicate-vs-ecc",
+      "source": ""
+    },
+    {
+      "kind": "agent",
+      "name": "performance-optimizer",
+      "reason": "duplicate-vs-ecc",
+      "source": ""
+    },
+    {
+      "kind": "agent",
+      "name": "planner",
+      "reason": "duplicate-vs-ecc",
+      "source": ""
+    },
+    {
+      "kind": "agent",
+      "name": "pr-test-analyzer",
+      "reason": "duplicate-vs-ecc",
+      "source": ""
+    },
+    {
+      "kind": "agent",
+      "name": "security-reviewer",
+      "reason": "duplicate-vs-ecc",
+      "source": ""
+    },
+    {
+      "kind": "agent",
+      "name": "silent-failure-hunter",
+      "reason": "duplicate-vs-ecc",
+      "source": ""
+    },
+    {
+      "kind": "skill",
+      "name": "agent-harness-construction",
+      "reason": "duplicate-vs-ecc",
+      "source": ""
+    },
+    {
+      "kind": "skill",
+      "name": "agent-introspection-debugging",
+      "reason": "duplicate-vs-ecc",
+      "source": ""
+    },
+    {
+      "kind": "skill",
+      "name": "android-clean-architecture",
+      "reason": "duplicate-vs-ecc",
+      "source": ""
+    },
+    {
+      "kind": "skill",
+      "name": "api-connector-builder",
+      "reason": "duplicate-vs-ecc",
+      "source": ""
+    },
+    {
+      "kind": "skill",
+      "name": "automation-audit-ops",
+      "reason": "duplicate-vs-ecc",
+      "source": ""
+    },
+    {
+      "kind": "skill",
+      "name": "autonomous-agent-harness",
+      "reason": "duplicate-vs-ecc",
+      "source": ""
+    },
+    {
+      "kind": "skill",
+      "name": "blender-motion-state-inspection",
+      "reason": "duplicate-vs-ecc",
+      "source": ""
+    },
+    {
+      "kind": "skill",
+      "name": "carrier-relationship-management",
+      "reason": "duplicate-vs-ecc",
+      "source": ""
+    },
+    {
+      "kind": "skill",
+      "name": "claude-devfleet",
+      "reason": "duplicate-vs-ecc",
+      "source": ""
+    },
+    {
+      "kind": "skill",
+      "name": "connections-optimizer",
+      "reason": "duplicate-vs-ecc",
+      "source": ""
+    },
+    {
+      "kind": "skill",
+      "name": "continuous-learning",
+      "reason": "duplicate-vs-ecc",
+      "source": ""
+    },
+    {
+      "kind": "skill",
+      "name": "continuous-learning-v2",
+      "reason": "duplicate-vs-ecc",
+      "source": ""
+    },
+    {
+      "kind": "skill",
+      "name": "dashboard-builder",
+      "reason": "duplicate-vs-ecc",
+      "source": ""
+    },
+    {
+      "kind": "skill",
+      "name": "database-migrations",
+      "reason": "duplicate-vs-ecc",
+      "source": ""
+    },
+    {
+      "kind": "skill",
+      "name": "deployment-patterns",
+      "reason": "duplicate-vs-ecc",
+      "source": ""
+    },
+    {
+      "kind": "skill",
+      "name": "design-system",
+      "reason": "duplicate-vs-ecc",
+      "source": ""
+    },
+    {
+      "kind": "skill",
+      "name": "docker-patterns",
+      "reason": "duplicate-vs-ecc",
+      "source": ""
+    },
+    {
+      "kind": "skill",
+      "name": "e2e-testing",
+      "reason": "duplicate-vs-ecc",
+      "source": ""
+    },
+    {
+      "kind": "skill",
+      "name": "ecc-guide",
+      "reason": "duplicate-vs-ecc",
+      "source": ""
+    },
+    {
+      "kind": "skill",
+      "name": "ecc-tools-cost-audit",
+      "reason": "duplicate-vs-ecc",
+      "source": ""
+    },
+    {
+      "kind": "skill",
+      "name": "eval-harness",
+      "reason": "duplicate-vs-ecc",
+      "source": ""
+    },
+    {
+      "kind": "skill",
+      "name": "frontend-slides",
+      "reason": "duplicate-vs-ecc",
+      "source": ""
+    },
+    {
+      "kind": "skill",
+      "name": "healthcare-cdss-patterns",
+      "reason": "duplicate-vs-ecc",
+      "source": ""
+    },
+    {
+      "kind": "skill",
+      "name": "hexagonal-architecture",
+      "reason": "duplicate-vs-ecc",
+      "source": ""
+    },
+    {
+      "kind": "skill",
+      "name": "homelab-network-readiness",
+      "reason": "duplicate-vs-ecc",
+      "source": ""
+    },
+    {
+      "kind": "skill",
+      "name": "homelab-pihole-dns",
+      "reason": "duplicate-vs-ecc",
+      "source": ""
+    },
+    {
+      "kind": "skill",
+      "name": "laravel-verification",
+      "reason": "duplicate-vs-ecc",
+      "source": ""
+    },
+    {
+      "kind": "skill",
+      "name": "lead-intelligence",
+      "reason": "duplicate-vs-ecc",
+      "source": ""
+    },
+    {
+      "kind": "skill",
+      "name": "market-research",
+      "reason": "duplicate-vs-ecc",
+      "source": ""
+    },
+    {
+      "kind": "skill",
+      "name": "motion-patterns",
+      "reason": "duplicate-vs-ecc",
+      "source": ""
+    },
+    {
+      "kind": "skill",
+      "name": "mysql-patterns",
+      "reason": "duplicate-vs-ecc",
+      "source": ""
+    },
+    {
+      "kind": "skill",
+      "name": "netmiko-ssh-automation",
+      "reason": "duplicate-vs-ecc",
+      "source": ""
+    },
+    {
+      "kind": "skill",
+      "name": "network-config-validation",
+      "reason": "duplicate-vs-ecc",
+      "source": ""
+    },
+    {
+      "kind": "skill",
+      "name": "nutrient-document-processing",
+      "reason": "duplicate-vs-ecc",
+      "source": ""
+    },
+    {
+      "kind": "skill",
+      "name": "openclaw-persona-forge",
+      "reason": "duplicate-vs-ecc",
+      "source": ""
+    },
+    {
+      "kind": "skill",
+      "name": "plankton-code-quality",
+      "reason": "duplicate-vs-ecc",
+      "source": ""
+    },
+    {
+      "kind": "skill",
+      "name": "production-audit",
+      "reason": "duplicate-vs-ecc",
+      "source": ""
+    },
+    {
+      "kind": "skill",
+      "name": "project-flow-ops",
+      "reason": "duplicate-vs-ecc",
+      "source": ""
+    },
+    {
+      "kind": "skill",
+      "name": "prompt-optimizer",
+      "reason": "duplicate-vs-ecc",
+      "source": ""
+    },
+    {
+      "kind": "skill",
+      "name": "remotion-video-creation",
+      "reason": "duplicate-vs-ecc",
+      "source": ""
+    },
+    {
+      "kind": "skill",
+      "name": "repo-scan",
+      "reason": "duplicate-vs-ecc",
+      "source": ""
+    },
+    {
+      "kind": "skill",
+      "name": "research-ops",
+      "reason": "duplicate-vs-ecc",
+      "source": ""
+    },
+    {
+      "kind": "skill",
+      "name": "safety-guard",
+      "reason": "duplicate-vs-ecc",
+      "source": ""
+    },
+    {
+      "kind": "skill",
+      "name": "security-bounty-hunter",
+      "reason": "duplicate-vs-ecc",
+      "source": ""
+    },
+    {
+      "kind": "skill",
+      "name": "security-scan",
+      "reason": "duplicate-vs-ecc",
+      "source": ""
+    },
+    {
+      "kind": "skill",
+      "name": "social-graph-ranker",
+      "reason": "duplicate-vs-ecc",
+      "source": ""
+    },
+    {
+      "kind": "skill",
+      "name": "swift-actor-persistence",
+      "reason": "duplicate-vs-ecc",
+      "source": ""
+    },
+    {
+      "kind": "skill",
+      "name": "swift-protocol-di-testing",
+      "reason": "duplicate-vs-ecc",
+      "source": ""
+    },
+    {
+      "kind": "skill",
+      "name": "verification-loop",
+      "reason": "duplicate-vs-ecc",
+      "source": ""
+    },
+    {
+      "kind": "skill",
+      "name": "vite-patterns",
+      "reason": "duplicate-vs-ecc",
+      "source": ""
+    }
+  ]
+}
