@@ -5,11 +5,16 @@ import { sseResponse } from "@/lib/prd/sse";
 import { runRegenerateDoc, normalizeDocName } from "@/lib/prd/pipeline";
 import { createRateLimiter } from "@/lib/prd/rate-limit";
 import { clientIp } from "@/lib/prd/client-ip";
+import { readJsonLimited } from "@/lib/prd/http-body";
 import { countTasks, MAX_CLARIFY_QUESTIONS } from "@/lib/prd/parse";
 import { deriveDomain, digestFor, learnFromOutcome, recordOutcome } from "@/lib/prd/memory";
 import type { GeneratedDoc, MemorySummary } from "@/lib/prd/types";
 
 export const runtime = "nodejs";
+// Batas eksekusi platform dalam detik. Plan Hobby Vercel maksimum 300;
+// turunkan nilai ini bila plan/kuota lebih rendah.
+export const maxDuration = 300;
+export const dynamic = "force-dynamic";
 
 const MAX_IDEA_LENGTH = 2000;
 const MAX_SCOPE_LENGTH = 12_000;
@@ -17,6 +22,19 @@ const MAX_DOC_CONTENT_LENGTH = 8000;
 const MAX_DOC_ITEMS = 20;
 const MAX_ANSWER_LENGTH = 500;
 const MAX_GAP_LENGTH = 300;
+// Body membawa scope + dokumen terkait, jadi batasnya jauh lebih besar dari route lain.
+const MAX_BODY_BYTES = 512 * 1024;
+// Plafon waktu TOTAL regenerasi (milidetik). Harus lebih kecil dari maxDuration
+// (300 detik) supaya SSE masih sempat mengirim event error/done sebelum function
+// dimatikan platform - pola yang sama dengan GENERATE_BUDGET_MS di /api/generate.
+const REGENERATE_BUDGET_MS = parseBudgetEnv(process.env.REGENERATE_BUDGET_MS);
+
+function parseBudgetEnv(value: string | undefined): number {
+  const parsed = value === undefined ? NaN : Number(value);
+  if (Number.isInteger(parsed) && parsed > 0) return parsed;
+  return 280_000;
+}
+
 // BETA: rate limit in-memory per IP (10/menit).
 const regenerateLimiter = createRateLimiter({ capacity: 10, refillPerSec: 10 / 60 });
 
@@ -35,12 +53,11 @@ function badRequest(message: string): Response {
 }
 
 export async function POST(request: Request): Promise<Response> {
-  let body: RegenerateBody;
-  try {
-    body = (await request.json()) as RegenerateBody;
-  } catch {
-    return badRequest("Body JSON tidak valid.");
+  const parsed = await readJsonLimited(request, MAX_BODY_BYTES);
+  if (!parsed.ok) {
+    return Response.json({ error: parsed.message }, { status: parsed.status });
   }
+  const body = parsed.value as RegenerateBody;
 
   const { idea, scope, doc, docs } = body;
   if (typeof idea !== "string" || idea.trim().length === 0 || idea.length > MAX_IDEA_LENGTH) {
@@ -95,50 +112,66 @@ export async function POST(request: Request): Promise<Response> {
   }
 
   return sseResponse(request, async ({ cfg, signal, emit }) => {
-    // Memori agent TIDAK boleh mengganggu regenerasi: setiap IO dibungkus try/catch.
-    let memoryDigest = "";
+    // Budget waktu: batalkan regenerasi SEBELUM maxDuration platform, supaya client
+    // menerima event error/done (bukan koneksi putus mendadak di tengah stream).
+    // Tanpa ini, callWithRetry (3 x timeoutMs) bisa melewati 300 detik dan function
+    // dibunuh platform sehingga stream mati tanpa done/error.
+    const budget = new AbortController();
+    let timedOut = false;
+    const timer = setTimeout(() => {
+      timedOut = true;
+      budget.abort();
+    }, REGENERATE_BUDGET_MS);
+    const onClientAbort = (): void => budget.abort();
+    if (signal.aborted) budget.abort();
+    else signal.addEventListener("abort", onClientAbort);
+
     try {
-      memoryDigest = await digestFor(canonicalDoc, deriveDomain(idea));
-    } catch {
-      memoryDigest = "";
-    }
-
-    const startedAt = Date.now();
-    const result = await runRegenerateDoc({
-      cfg,
-      idea,
-      scope,
-      doc: canonicalDoc,
-      docs: relatedDocs,
-      answers,
-      analysis: reqAnalysis,
-      gaps: reqGaps,
-      signal,
-      emit,
-      memoryDigest,
-    });
-
-    const ok = "content" in result;
-    let memory: MemorySummary | undefined;
-    if (!signal.aborted) {
+      // Memori agent TIDAK boleh mengganggu regenerasi: setiap IO dibungkus try/catch.
+      let memoryDigest = "";
       try {
-        const record = recordOutcome({
-          idea,
-          docType: canonicalDoc,
-          signals: {
-            retries: 0,
-            failedDocs: ok ? 0 : 1,
-            durationMs: Date.now() - startedAt,
-            stage: canonicalDoc === "TASK-LIST" ? 4 : 3,
-          },
-        });
-        memory = (await learnFromOutcome(record)).summary;
+        memoryDigest = await digestFor(canonicalDoc, deriveDomain(idea));
       } catch {
-        memory = undefined;
+        memoryDigest = "";
       }
-    }
 
-    if (!signal.aborted) {
+      const startedAt = Date.now();
+      const result = await runRegenerateDoc({
+        cfg,
+        idea,
+        scope,
+        doc: canonicalDoc,
+        docs: relatedDocs,
+        answers,
+        analysis: reqAnalysis,
+        gaps: reqGaps,
+        signal: budget.signal,
+        emit,
+        memoryDigest,
+      });
+
+      const ok = "content" in result;
+      let memory: MemorySummary | undefined;
+      if (!signal.aborted) {
+        try {
+          const record = recordOutcome({
+            idea,
+            docType: canonicalDoc,
+            signals: {
+              retries: 0,
+              failedDocs: ok ? 0 : 1,
+              durationMs: Date.now() - startedAt,
+              stage: canonicalDoc === "TASK-LIST" ? 4 : 3,
+            },
+          });
+          memory = (await learnFromOutcome(record)).summary;
+        } catch {
+          memory = undefined;
+        }
+      }
+
+      if (signal.aborted) return;
+
       if (ok) {
         emit("done", {
           docs: [{ name: result.name, content: result.content }],
@@ -146,6 +179,14 @@ export async function POST(request: Request): Promise<Response> {
           failed: [],
           scope,
           memory,
+        });
+      } else if (timedOut) {
+        // Budget habis tanpa dokumen: event error fatal adalah terminal -
+        // done kosong akan menghapus pesan error di client (setErrorMsg(null)).
+        emit("error", {
+          stage: canonicalDoc === "TASK-LIST" ? 4 : 3,
+          kind: "fatal",
+          message: `Batas waktu regenerasi tercapai (${REGENERATE_BUDGET_MS} ms). Coba lagi.`,
         });
       } else {
         emit("done", {
@@ -156,6 +197,9 @@ export async function POST(request: Request): Promise<Response> {
           memory,
         });
       }
+    } finally {
+      clearTimeout(timer);
+      signal.removeEventListener("abort", onClientAbort);
     }
   });
 }

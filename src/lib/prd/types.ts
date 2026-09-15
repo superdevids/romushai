@@ -95,11 +95,15 @@ export interface MemorySummary {
   promotedCount: number;
 }
 
+/** Status akhir pembacaan stream SSE sisi client (additive). */
+export type SseCompletion = "done" | "truncated" | "error";
+
 // Fungsi emit dengan overload: payload harus cocok dengan nama event.
 export interface Emit {
   (event: "stage_start", data: { stage: number; name: string }): void;
   (event: "chunk", data: { stage: number; doc?: DocName; text: string }): void;
   (event: "stage_end", data: { stage: number }): void;
+  (event: "plan", data: { docs: DocName[] }): void;
   (event: "error", data: { stage: number; kind: "retryable" | "fatal"; message: string }): void;
   (event: "done", data: { docs: GeneratedDoc[]; taskCount: number; failed: FailedDoc[]; scope: string; analysis?: string; gaps?: string[]; memory?: MemorySummary }): void;
 }

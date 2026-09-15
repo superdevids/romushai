@@ -237,37 +237,52 @@ export async function runGeneratePipeline(opts: GenerateOptions): Promise<Pipeli
   outcome.scope = scope;
   emit("stage_end", { stage: 1 });
 
-  // Tahap 2 (langkah 2): pengambilan AI agent, skill, dan kemampuan relevan
+  // Tahap 2 (langkah 2): pengambilan AI agent, skill, dan kemampuan relevan.
+  // Retry TIDAK bertingkat: loop luar maksimum 2 ronde (percobaan awal + 1 ulangan
+  // dengan retryStage2Note) dan panggilan provider dilakukan LANGSUNG (bukan
+  // callWithRetry) agar total panggilan provider <= MAX_ATTEMPTS, bukan
+  // MAX_ATTEMPTS x MAX_ATTEMPTS. Fatal -> berhenti; retryable -> ronde berikutnya.
   emit("stage_start", { stage: 2, name: "Langkah 2: Pengambilan Skill dan Kapabilitas Agent yang Relevan" });
   let recommendations: DocName[] = [];
   let recOk = false;
-  for (let attempt = 0; attempt < MAX_ATTEMPTS && !recOk; attempt++) {
-    if (attempt > 0) await sleep(BACKOFF_MS[attempt]);
-    const s2 = await callWithRetry({
-      cfg,
-      model: cfg.modelSmall,
-      messages: stage2Messages(idea, scope, attempt > 0 ? retryStage2Note(scope) : undefined, answers, outcome.analysis, outcome.gaps),
-      signal,
-    });
-    account(2, s2.attempts);
-    if (!s2.ok) {
+  let s2Attempts = 0;
+  const STAGE2_MAX_ROUNDS = 2;
+  for (let round = 0; round < STAGE2_MAX_ROUNDS && !recOk; round++) {
+    if (round > 0) await sleep(BACKOFF_MS[round]);
+    s2Attempts += 1;
+    let s2Text: string;
+    try {
+      s2Text = await streamChatCompletion({
+        cfg,
+        model: cfg.modelSmall,
+        messages: stage2Messages(idea, scope, round > 0 ? retryStage2Note(scope) : undefined, answers, outcome.analysis, outcome.gaps),
+        signal,
+        timeoutMs: STAGE_TIMEOUT_MS,
+        onChunk: () => undefined,
+      });
+    } catch (e) {
       if (signal?.aborted) {
+        account(2, s2Attempts);
         emit("stage_end", { stage: 2 });
         return outcome;
       }
-      if (s2.kind === "fatal") {
-        emit("error", { stage: 2, kind: "fatal", message: s2.message });
+      if (e instanceof LlmError && e.kind === "fatal") {
+        account(2, s2Attempts);
+        emit("error", { stage: 2, kind: "fatal", message: e.message });
         emit("stage_end", { stage: 2 });
         return outcome;
       }
+      // Retryable: lanjut ke ronde berikutnya (ronde 2 memakai retryStage2Note).
       continue;
     }
-    const parsed = parseDocRecommendation(s2.text);
+    const parsed = parseDocRecommendation(s2Text);
     if (parsed.length > 0) {
       recommendations = parsed;
       recOk = true;
     }
   }
+  // Akuntansi jumlah percobaan provider stage 2 (tidak undercount).
+  account(2, s2Attempts);
   if (!recOk) {
     if (signal?.aborted) {
       emit("stage_end", { stage: 2 });
@@ -278,6 +293,9 @@ export async function runGeneratePipeline(opts: GenerateOptions): Promise<Pipeli
     return outcome;
   }
   emit("stage_end", { stage: 2 });
+  // Additive: kirim daftar dokumen rencana agar client bisa mendeteksi dokumen
+  // yang belum selesai bila stream terputus sebelum event "done".
+  emit("plan", { docs: recommendations });
 
   // Tahap 3: draf per dokumen (sequential, tanpa nomor langkah); TASK-LIST dibuat di tahap 4.
   const stage3Docs = recommendations.filter((d) => d !== "TASK-LIST");

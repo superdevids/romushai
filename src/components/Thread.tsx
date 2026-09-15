@@ -2,8 +2,8 @@
 
 import { useEffect, useMemo, useRef, useState, type RefObject } from "react";
 import Markdown from "react-markdown";
-import { Sparkles, Loader2 } from "lucide-react";
-import type { ClarifyQuestion, FailedDoc, GeneratedDoc } from "@/lib/prd/types";
+import { Sparkles, Loader2, RefreshCw, AlertTriangle } from "lucide-react";
+import type { ClarifyQuestion, DocName, FailedDoc, GeneratedDoc } from "@/lib/prd/types";
 import { docFileName } from "@/lib/format";
 import { ClarifyCards } from "./ClarifyCards";
 import { DocBubble, ErrorBubble, FailedDocBubble } from "./DocBubble";
@@ -235,10 +235,46 @@ export interface ThreadViewProps {
 	onDownloadDoc: (name: GeneratedDoc["name"], content: string) => void;
 	onRegenerateDoc: (name: GeneratedDoc["name"]) => void;
 	onRetryError?: () => void;
+	/** Daftar dokumen plan yang belum selesai (stream terputus / tanpa "done"). */
+	resume?: DocName[] | null;
+	onResumeRemaining?: () => void;
+}
+
+/** Kartu resume: tawarkan melanjutkan dokumen plan yang belum selesai satu per satu. */
+function ResumeDocs({ resume, busy, onResumeRemaining }: { resume: DocName[]; busy: boolean; onResumeRemaining?: () => void }) {
+	return (
+		<div
+			className="flex items-start gap-2 self-start rounded-xl border border-[var(--warn)] bg-[var(--warn-soft)] px-3 py-2 text-[13px]"
+			role="alert"
+		>
+			<AlertTriangle
+				className="mt-0.5 size-4 shrink-0 text-[var(--warn)]"
+				aria-hidden="true"
+			/>
+			<div className="flex-1">
+				<p>
+					{resume.length} dokumen belum selesai: <span className="font-mono text-[12px]">{resume.join(", ")}</span>
+				</p>
+				<button
+					type="button"
+					onClick={onResumeRemaining}
+					disabled={busy || !onResumeRemaining}
+					className="mt-2 inline-flex items-center gap-1 rounded-[var(--radius-md)] bg-[var(--warn)] px-3 py-1 text-xs font-medium text-[var(--on-accent)] transition-colors duration-[var(--dur-fast)] hover:brightness-110 disabled:cursor-not-allowed disabled:opacity-40"
+					aria-label={`Lanjutkan ${resume.length} dokumen tersisa`}
+				>
+					<RefreshCw
+						className="size-3"
+						aria-hidden="true"
+					/>
+					Lanjutkan dokumen tersisa ({resume.length})
+				</button>
+			</div>
+		</div>
+	);
 }
 
 export function ThreadView(props: ThreadViewProps) {
-	const { sentIdea, clarify, answers, busy, completedClarify, streaming, stageStatus, showAssistant, assistantText, docs, taskCount, preview, copied, failed, errorMsg, threadEndRef, onAnswer, onUseAll, onContinue, onPreviewDoc, onCopyDoc, onDownloadDoc, onRegenerateDoc, onRetryError } = props;
+	const { sentIdea, clarify, answers, busy, completedClarify, streaming, stageStatus, showAssistant, assistantText, docs, taskCount, preview, copied, failed, errorMsg, resume, threadEndRef, onAnswer, onUseAll, onContinue, onPreviewDoc, onCopyDoc, onDownloadDoc, onRegenerateDoc, onRetryError, onResumeRemaining } = props;
 	const reduced = usePrefersReducedMotion();
 	// `streaming` adalah source of truth (tidak di-null-kan saat done oleh page.tsx), jadi
 	// teks akhir tetap ada sampai run berikutnya. Typewriter hanya menampilkan progres.
@@ -357,6 +393,14 @@ export function ThreadView(props: ThreadViewProps) {
 			)}
 
 			{docCards}
+
+			{resume && resume.length > 0 && (
+				<ResumeDocs
+					resume={resume}
+					busy={busy}
+					onResumeRemaining={onResumeRemaining}
+				/>
+			)}
 
 			{failed.map((f) => (
 				<FailedDocBubble

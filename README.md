@@ -44,7 +44,7 @@ Variabel env (server-only, tanpa prefix `NEXT_PUBLIC_`):
 - Satu codepath OpenAI-compatible (plain fetch, tanpa SDK). **Ollama tidak didukung** - butuh mode kompatibilitas berbeda.
 - Rate limit **in-memory per instance** - upgrade ke Upstash Redis bila deploy multi-instance.
 - Riwayat tersimpan di `localStorage` per browser/device.
-- Tema default **gelap**; pilihan pengguna disimpan di `localStorage` (`aiprd-theme`).
+- Tema default **gelap**; pilihan pengguna disimpan di `localStorage` (`romushai-theme`).
 
 ## Scripts
 

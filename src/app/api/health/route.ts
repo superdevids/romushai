@@ -4,12 +4,17 @@
 // Bila HEALTH_TOKEN di-set, detail penuh butuh header x-health-token yang cocok.
 
 import { memoryHealth } from "@/lib/prd/memory";
+import { createRateLimiter } from "@/lib/prd/rate-limit";
+import { clientIp } from "@/lib/prd/client-ip";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 
 const PROBE_TIMEOUT_MS = 8_000;
 const EXCERPT_LIMIT = 300;
+// BETA: rate limit in-memory per IP (umum 20/menit; ?probe=1 dibatasi 5/menit).
+const healthLimiter = createRateLimiter({ capacity: 20, refillPerSec: 20 / 60 });
+const probeLimiter = createRateLimiter({ capacity: 5, refillPerSec: 5 / 60 });
 
 interface ProviderProbe {
   ok: boolean;
@@ -74,7 +79,26 @@ async function probeModels(baseUrl: string, apiKey: string): Promise<ProviderPro
 }
 
 export async function GET(request: Request): Promise<Response> {
+  const limited = healthLimiter.check(clientIp(request));
+  if (!limited.ok) {
+    return Response.json(
+      { error: `Terlalu banyak permintaan. Coba lagi dalam ${limited.retryAfterSeconds} detik.` },
+      {
+        status: 429,
+        headers: { "Content-Type": "application/json", "Retry-After": String(limited.retryAfterSeconds) },
+      },
+    );
+  }
+
   const healthToken = process.env.HEALTH_TOKEN;
+  // Fail-closed di produksi: tanpa HEALTH_TOKEN, endpoint hanya membalas status
+  // minimal (tanpa baseUrl/model/keyFingerprint) supaya tidak bocor ke publik.
+  if (process.env.NODE_ENV === "production" && !healthToken) {
+    return Response.json(
+      { ok: false, hint: "HEALTH_TOKEN wajib diatur di produksi untuk membuka detail health." },
+      { status: 503, headers: { "Cache-Control": "no-store" } },
+    );
+  }
   if (healthToken) {
     const provided = request.headers.get("x-health-token");
     if (provided !== healthToken) {
@@ -95,6 +119,20 @@ export async function GET(request: Request): Promise<Response> {
   }
 
   const wantProbe = new URL(request.url).searchParams.get("probe") === "1";
+  if (wantProbe) {
+    // Probe memanggil penyedia LLM: batasnya lebih ketat agar tidak jadi amplifikasi.
+    const probeLimited = probeLimiter.check(clientIp(request));
+    if (!probeLimited.ok) {
+      return Response.json(
+        { error: `Terlalu banyak permintaan probe. Coba lagi dalam ${probeLimited.retryAfterSeconds} detik.` },
+        {
+          status: 429,
+          headers: { "Content-Type": "application/json", "Retry-After": String(probeLimited.retryAfterSeconds) },
+        },
+      );
+    }
+  }
+
   const payload = {
     ok: false,
     baseUrl,

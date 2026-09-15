@@ -15,6 +15,7 @@ const CSP = [
   "frame-ancestors 'none'",
   "base-uri 'self'",
   "form-action 'self'",
+  "object-src 'none'",
 ].join("; ");
 
 const SECURITY_HEADERS = [
@@ -23,6 +24,8 @@ const SECURITY_HEADERS = [
   { key: "X-Frame-Options", value: "DENY" },
   { key: "Permissions-Policy", value: "camera=(), microphone=(), geolocation=()" },
   { key: "Content-Security-Policy", value: CSP },
+  // HSTS hanya efektif di HTTPS (Vercel mengirim HTTPS di produksi).
+  { key: "Strict-Transport-Security", value: "max-age=63072000; includeSubDomains" },
 ];
 
 const nextConfig: NextConfig = {

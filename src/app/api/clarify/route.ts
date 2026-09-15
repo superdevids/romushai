@@ -4,8 +4,13 @@
 import { envConfig, runClarify } from "@/lib/prd/pipeline";
 import { createRateLimiter } from "@/lib/prd/rate-limit";
 import { clientIp } from "@/lib/prd/client-ip";
+import { readJsonLimited } from "@/lib/prd/http-body";
 
 export const runtime = "nodejs";
+// Batas eksekusi platform dalam detik. Plan Hobby Vercel maksimum 300;
+// turunkan nilai ini bila plan/kuota lebih rendah.
+export const maxDuration = 300;
+export const dynamic = "force-dynamic";
 
 const MAX_IDEA_LENGTH = 2000;
 const MAX_BODY_BYTES = 16 * 1024;
@@ -17,30 +22,11 @@ interface ClarifyBody {
 }
 
 export async function POST(request: Request): Promise<Response> {
-  const contentLength = request.headers.get("content-length");
-  if (contentLength !== null) {
-    const n = Number(contentLength);
-    if (Number.isFinite(n) && n > MAX_BODY_BYTES) {
-      return Response.json({ error: "Body terlalu besar (maksimal 16 KB)." }, { status: 400 });
-    }
+  const parsed = await readJsonLimited(request, MAX_BODY_BYTES);
+  if (!parsed.ok) {
+    return Response.json({ error: parsed.message }, { status: parsed.status });
   }
-
-  let rawText: string;
-  try {
-    rawText = await request.text();
-  } catch {
-    return Response.json({ error: "Body JSON tidak valid." }, { status: 400 });
-  }
-  if (rawText.length > MAX_BODY_BYTES) {
-    return Response.json({ error: "Body terlalu besar (maksimal 16 KB)." }, { status: 400 });
-  }
-
-  let body: ClarifyBody;
-  try {
-    body = JSON.parse(rawText) as ClarifyBody;
-  } catch {
-    return Response.json({ error: "Body JSON tidak valid." }, { status: 400 });
-  }
+  const body = parsed.value as ClarifyBody;
 
   const idea = body.idea;
   if (typeof idea !== "string" || idea.trim().length === 0) {

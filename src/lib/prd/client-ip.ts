@@ -1,6 +1,9 @@
 // Helper terpusat identitas IP klien untuk rate limit.
-// Ambil entri TERAKHIR x-forwarded-for (ditambahkan proxy terdekat),
-// bukan pertama (dikontrol klien). Sanitasi agar aman sebagai kunci Map.
+// Aturan kepercayaan proxy: reverse proxy tepercaya (Vercel/LB) menambahkan IP
+// KE KANAN pada x-forwarded-for, jadi N = TRUSTED_PROXY_COUNT (default 1) entri
+// paling kanan dianggap ditulis oleh proxy tepercaya dan dipakai sebagai
+// identitas. Entri di kiri, serta SELURUH header lain (termasuk x-real-ip),
+// dikontrol klien sehingga TIDAK dipercaya. Tanpa header tepercaya -> "unknown".
 
 function parseTrustedProxyCount(): number {
   const raw = process.env.TRUSTED_PROXY_COUNT;
@@ -21,15 +24,15 @@ export function clientIp(request: Request): string {
       .filter((p) => p.length > 0);
     if (parts.length > 0) {
       const idx = Math.max(0, parts.length - count);
-      return sanitize(parts[idx] ?? "local");
+      return sanitize(parts[idx] ?? "unknown");
     }
   }
-  const real = request.headers.get("x-real-ip");
-  if (real && real.trim().length > 0) return sanitize(real.trim());
-  return "local";
+  // Tanpa header tepercaya: kembalikan kunci fallback aman. x-real-ip sengaja
+  // TIDAK dipakai - klien bisa mengirimnya untuk memalsukan identitas.
+  return "unknown";
 }
 
 function sanitize(value: string): string {
   const cleaned = value.replace(/[^0-9a-fA-F:.]/g, "").slice(0, 64);
-  return cleaned.length > 0 ? cleaned : "local";
+  return cleaned.length > 0 ? cleaned : "unknown";
 }

@@ -57,6 +57,33 @@ function isEnoent(error: unknown): boolean {
   return error instanceof Error && (error as NodeJS.ErrnoException).code === "ENOENT";
 }
 
+// Cache deteksi filesystem read-only (Vercel serverless: ephemeral/read-only).
+// Diisi SEKALI: via env VERCEL saat modul dimuat, atau saat IO pertama gagal
+// dengan EROFS/EACCES/EPERM. Setelah terkunci, semua IO menjadi no-op TANPA
+// syscall maupun log berulang (cek murah di awal setiap fungsi IO).
+let readonlyFsCache: boolean | null = null;
+if (process.env.VERCEL) readonlyFsCache = true;
+
+function isReadonlyFs(): boolean {
+  return readonlyFsCache === true;
+}
+
+/** True bila error menandakan filesystem read-only / tanpa izin tulis. */
+function isReadonlyError(error: unknown): boolean {
+  if (!(error instanceof Error)) return false;
+  const code = (error as NodeJS.ErrnoException).code;
+  return code === "EROFS" || code === "EACCES" || code === "EPERM";
+}
+
+/**
+ * Kunci mode no-op + log sekali. Request berikutnya langsung no-op
+ * tanpa syscall baru maupun error berulang di log.
+ */
+function markReadonlyFs(error: unknown): void {
+  readonlyFsCache = true;
+  warnOnce(error);
+}
+
 /**
  * Root project = leluhur terdekat yang punya package.json, dilewati dari cwd lalu
  * (fallback) dari lokasi modul. Dipakai untuk MENGUNCI lokasi memori ke root project
@@ -201,8 +228,13 @@ async function tryRestoreFromBackup(): Promise<AgentMemory[] | null> {
     if (records === null) return null;
     try {
       // Pulihkan berkas utama dari isi backup; kegagalan tulis tidak membatalkan hasil baca.
-      await enqueueWrite(() => atomicWrite(memoryFilePath(), raw));
+      // Filesystem read-only: lewati penulisan (hasil baca tetap dikembalikan).
+      if (!isReadonlyFs()) await enqueueWrite(() => atomicWrite(memoryFilePath(), raw));
     } catch (error) {
+      if (isReadonlyError(error)) {
+        markReadonlyFs(error);
+        return records;
+      }
       warnOnce(error);
     }
     return records;
@@ -213,6 +245,8 @@ async function tryRestoreFromBackup(): Promise<AgentMemory[] | null> {
 
 /** Muat store dari disk. Berkas tidak ada / JSON rusak -> pulihkan backup -> store kosong; TIDAK pernah throw. */
 export async function loadMemoryStore(): Promise<AgentMemory[]> {
+  // Filesystem read-only (mis. Vercel serverless): tidak ada yang bisa dibaca.
+  if (isReadonlyFs()) return [];
   const file = memoryFilePath();
   let raw: string;
   try {
@@ -221,6 +255,10 @@ export async function loadMemoryStore(): Promise<AgentMemory[]> {
     if (isEnoent(error)) {
       // Self-verify saat boot: berkas utama hilang -> coba pulihkan dari backup.
       return (await tryRestoreFromBackup()) ?? [];
+    }
+    if (isReadonlyError(error)) {
+      markReadonlyFs(error);
+      return [];
     }
     warnOnce(error);
     return [];
@@ -243,6 +281,8 @@ export async function loadMemoryStore(): Promise<AgentMemory[]> {
  * di sini hanya membuang CPU (sort + filter) untuk hasil yang sama. TIDAK pernah throw.
  */
 export async function persistMemoryStore(store: AgentMemory[]): Promise<void> {
+  // Filesystem read-only: lewati semua IO tanpa syscall maupun log baru.
+  if (isReadonlyFs()) return;
   await enqueueWrite(async () => {
     try {
       const file = memoryFilePath();
@@ -255,6 +295,10 @@ export async function persistMemoryStore(store: AgentMemory[]): Promise<void> {
       await atomicWrite(file, payload);
       await syncDirBestEffort(path.dirname(file));
     } catch (error) {
+      if (isReadonlyError(error)) {
+        markReadonlyFs(error);
+        return;
+      }
       warnOnce(error);
     }
   });

@@ -58,6 +58,8 @@ export interface StreamChatOptions {
   messages: ChatMessage[];
   signal?: AbortSignal;
   timeoutMs?: number;
+  /** Deadline absolut (ms) untuk seluruh durasi stream; default env LLM_TOTAL_TIMEOUT_MS (900000). */
+  totalTimeoutMs?: number;
   onChunk: (text: string) => void;
 }
 
@@ -79,7 +81,8 @@ export async function streamChatCompletion(opts: StreamChatOptions): Promise<str
   };
 
   // Deadline ABSOLUT (terpisah dari inactivity): membatasi total durasi stream.
-  const totalTimeoutMs = parseTotalTimeoutEnv(process.env.LLM_TOTAL_TIMEOUT_MS);
+  // Dapat di-override pemanggil; default dari env LLM_TOTAL_TIMEOUT_MS.
+  const totalTimeoutMs = opts.totalTimeoutMs ?? parseTotalTimeoutEnv(process.env.LLM_TOTAL_TIMEOUT_MS);
   let totalExpired = false;
   const totalTimer = setTimeout(() => {
     totalExpired = true;
@@ -121,7 +124,8 @@ export async function streamChatCompletion(opts: StreamChatOptions): Promise<str
         );
       }
       if (res.status === 429) {
-        throw new LlmError("Penyedia model memberlakukan rate limit (429).", "fatal");
+        // Rate limit bersifat sementara: retryable agar pipeline bisa backoff + ulang.
+        throw new LlmError("Penyedia model memberlakukan rate limit (429).", "retryable");
       }
       if (res.status === 400) {
         throw new LlmError(
