@@ -2,7 +2,7 @@
 
 import type { ClarifyQuestion, FailedDoc, GeneratedDoc } from "./prd/types";
 
-export const HISTORY_KEY = "aiprd-history:v1";
+export const HISTORY_KEY = "romushai-history:v1";
 export const HISTORY_LIMIT = 20;
 
 export interface HistoryRecord {

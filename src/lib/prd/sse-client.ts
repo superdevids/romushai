@@ -28,6 +28,10 @@ export interface SseReadResult {
 	completion: SseCompletion;
 	/** Jumlah blok yang tidak bisa diparse (komentar heartbeat tidak dihitung). */
 	corruptBlocks: number;
+	/** True bila error fatal diterima dari server (terminal). */
+	sawFatal: boolean;
+	/** Cursor `id:` terakhir yang berhasil diproses (0 bila protokol tanpa id). */
+	lastId: number;
 }
 
 /** Blok komentar murni (mis. heartbeat ": ping") atau blok kosong -> bukan data. */
@@ -40,10 +44,20 @@ function isHeartbeatBlock(block: string): boolean {
 	});
 }
 
+export interface ReadSseOptions {
+	/** Dipanggil sebelum handler untuk setiap event ber-id: bahan resume cursor. */
+	onId?: (id: number) => void;
+	/** True = JANGAN sintesis error saat stream putus tanpa terminal (pemanggil yang
+	 * menangani reconnect, mis. streamJob). Berkas buffer `buf` tetap dibuang. */
+	quietDisconnect?: boolean;
+}
+
 export async function readSse(
 	response: Response,
 	handlers: { [K in keyof SseEventMap]: (d: SseEventMap[K]) => void },
+	opts?: ReadSseOptions,
 ): Promise<SseReadResult> {
+	const onId = opts?.onId;
 	if (!response.body) throw new Error("Respons tanpa body.");
 	const reader = response.body.getReader();
 	const decoder = new TextDecoder();
@@ -51,15 +65,21 @@ export async function readSse(
 	let corruptBlocks = 0;
 	let completed = false;
 	let sawFatalError = false;
+	let lastId = 0;
 	const processBlock = (block: string): void => {
 		// Heartbeat server (": ping") diabaikan, bukan data korup.
 		if (isHeartbeatBlock(block)) return;
 		try {
-			const { event, data } = parseSseBlock(block);
+			const { event, data, id } = parseSseBlock(block);
 			if (!event || data === undefined) return;
 			const handler = handlers[event as keyof SseEventMap];
 			if (!handler) return;
 			const payload = JSON.parse(data) as unknown;
+			// Cursor dicatat SEBELUM handler: bila handler gagal, resume tetap benar.
+			if (typeof id === "number") {
+				lastId = id;
+				onId?.(id);
+			}
 			const applyHandler = handlers[event as keyof SseEventMap] as (d: unknown) => void;
 			applyHandler(payload);
 			if (event === "done") completed = true;
@@ -96,7 +116,7 @@ export async function readSse(
 	}
 	// Blok korup / putus hanya dilaporkan bila stream belum selesai normal: setelah
 	// "done" diterima, sisa sampah tidak boleh memicu error "Sebagian data tidak terbaca".
-	if (!completed) {
+	if (!completed && !opts?.quietDisconnect) {
 		if (corruptBlocks > 0) {
 			handlers.error({ stage: 0, kind: "retryable", message: `Sebagian data streaming tidak terbaca (${corruptBlocks} blok). Hasil mungkin tidak lengkap.` });
 		} else if (!sawFatalError) {
@@ -106,5 +126,5 @@ export async function readSse(
 		}
 	}
 	const completion: SseCompletion = completed ? "done" : readFailed || corruptBlocks > 0 || sawFatalError ? "error" : "truncated";
-	return { completed, completion, corruptBlocks };
+	return { completed, completion, corruptBlocks, sawFatal: sawFatalError, lastId };
 }

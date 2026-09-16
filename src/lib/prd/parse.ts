@@ -146,23 +146,29 @@ export function parseStage0b(text: string): Stage0bResult {
   return { analysis, gaps, questions };
 }
 
-/** Parsing satu blok SSE (dipisahkan baris kosong): hasilkan event + data. */
+/** Parsing satu blok SSE (dipisahkan baris kosong): hasilkan event + data + id. */
 export interface SseBlock {
   event?: string;
   data?: string;
+  /** Cursor resume (`id:` server); undefined pada stream lama tanpa id. */
+  id?: number;
 }
 
 export function parseSseBlock(block: string): SseBlock {
   let event: string | undefined;
   let data: string | undefined;
+  let id: number | undefined;
   for (const line of block.split(/\r?\n/)) {
     if (line.startsWith("event:")) {
       event = line.slice(6).trim();
     } else if (line.startsWith("data:")) {
       data = (data === undefined ? "" : data + "\n") + line.slice(5).trimStart();
+    } else if (line.startsWith("id:")) {
+      const n = Number(line.slice(3).trim());
+      if (Number.isFinite(n)) id = n;
     }
   }
-  return { event, data };
+  return { event, data, id };
 }
 
 /** Hitung jumlah task pada TASK-LIST.md (format "### Task N: judul"). */

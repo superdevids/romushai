@@ -36,7 +36,7 @@ import type {
   PipelineOutcome,
   ClarifyQuestion,
 } from "./types.ts";
-import { DOC_NAMES } from "./types.ts";
+import { DOC_NAMES, STAGE_LABELS } from "./types.ts";
 import { recordOutcome } from "./memory-core.ts";
 
 const MAX_ATTEMPTS = 3; // percobaan awal + 2 retry
@@ -142,6 +142,14 @@ export interface GenerateOptions {
   emit: Emit;
   /** Digest memori agent (additive, opsional): pelajaran dari eksekusi sebelumnya. */
   memoryDigest?: string;
+  /**
+   * Analisis mendalam hasil pre-flight /api/clarify (stage 0a). Bila diisi,
+   * stage 0a + 0b DILEWATI (2 panggilan model kecil dihemat) dan nilainya dipakai
+   * sebagai konteks analisis. Kosong -> pipeline menghitungnya sendiri.
+   */
+  seededAnalysis?: string;
+  /** Gap hasil stage 0b (pasangan seededAnalysis). */
+  seededGaps?: string[];
 }
 
 const DOC_LOOKUP = new Map<string, DocName>(DOC_NAMES.map((n) => [n.toUpperCase(), n]));
@@ -163,7 +171,7 @@ function withRepairNotes(messages: ChatMessage[], notes: string[]): ChatMessage[
 }
 
 export async function runGeneratePipeline(opts: GenerateOptions): Promise<PipelineOutcome> {
-  const { cfg, idea, answers, signal, emit, memoryDigest } = opts;
+  const { cfg, idea, answers, signal, emit, memoryDigest, seededAnalysis, seededGaps } = opts;
   const outcome: PipelineOutcome = { docs: [], taskCount: 0, failed: [], scope: "", analysis: "", gaps: [] };
   // Akuntansi retry untuk memori agent: total retry + tahap pertama yang mengalami retry.
   const startedAt = Date.now();
@@ -178,47 +186,69 @@ export async function runGeneratePipeline(opts: GenerateOptions): Promise<Pipeli
     }
   };
 
-  // Tahap 0a (langkah 1): penalaran/pemahaman maksud + penalaran mendalam (streaming chunk)
-  emit("stage_start", { stage: 0, name: "Langkah 1: Analisis Kebutuhan Secara Mendalam dan Komprehensif" });
-  const s0a = await callWithRetry({
-    cfg,
-    model: cfg.modelSmall,
-    messages: stage0aMessages(idea),
-    signal,
-    onChunk: (text) => emit("chunk", { stage: 0, text }),
-  });
-  account(0, s0a.attempts);
-  if (!s0a.ok || signal?.aborted) {
-    if (s0a.ok === false && !signal?.aborted) emit("error", { stage: 0, kind: s0a.kind, message: s0a.message });
-    // stage_end tetap di-emit agar pasangan start/end seimbang di jalur gagal/abort.
+  // Tahap 0a (langkah 1): penalaran/pemahaman maksud + penalaran mendalam (streaming chunk).
+  // Dilewati bila pemanggil menyuntik seededAnalysis (hasil pre-flight /api/clarify
+  // yang sama persis dengan stage 0a): hemat 2 panggilan model kecil per generate.
+  const seed = typeof seededAnalysis === "string" && seededAnalysis.trim().length > 0 ? seededAnalysis : "";
+  if (seed.length === 0) {
+    emit("stage_start", { stage: 0, name: STAGE_LABELS[0] });
+    const s0a = await callWithRetry({
+      cfg,
+      model: cfg.modelSmall,
+      messages: stage0aMessages(idea),
+      signal,
+      onChunk: (text) => emit("chunk", { stage: 0, text }),
+    });
+    account(0, s0a.attempts);
+    if (!s0a.ok || signal?.aborted) {
+      if (s0a.ok === false && !signal?.aborted) emit("error", { stage: 0, kind: s0a.kind, message: s0a.message });
+      // stage_end tetap di-emit agar pasangan start/end seimbang di jalur gagal/abort.
+      emit("stage_end", { stage: 0 });
+      return outcome;
+    }
+    outcome.analysis = s0a.text;
     emit("stage_end", { stage: 0 });
-    return outcome;
+  } else {
+    outcome.analysis = seed;
+    // Teks seed tetap "di-stream" ke UI agar tampilan identik dengan jalur normal,
+    // tanpa biaya panggilan model. Buffer job men-coalesce chunk berurutan,
+    // jadi satu emit sudah cukup.
+    emit("stage_start", { stage: 0, name: STAGE_LABELS[0] });
+    emit("chunk", { stage: 0, text: seed });
+    emit("stage_end", { stage: 0 });
   }
-  outcome.analysis = s0a.text;
-  emit("stage_end", { stage: 0 });
 
-  // Tahap 0b (langkah 1): analisis dan audit kesenjangan, kelemahan, risiko (JSON internal)
-  emit("stage_start", { stage: 0, name: "Langkah 1: Analisis Kebutuhan Secara Mendalam dan Komprehensif" });
-  const s0b = await callWithRetry({
-    cfg,
-    model: cfg.modelSmall,
-    messages: stage0bMessages(idea, outcome.analysis),
-    signal,
-  });
-  account(0, s0b.attempts);
-  emit("stage_end", { stage: 0 });
-  if (signal?.aborted) return outcome;
-  if (s0b.ok) {
-    const stage0b = parseStage0b(s0b.text);
-    if (stage0b.analysis.length > 0) outcome.analysis = stage0b.analysis;
-    outcome.gaps = stage0b.gaps;
-  } else if (s0b.message !== "aborted") {
-    // Gagal parse/LLM -> tanpa gaps; lanjut dengan analisis mentah.
-    outcome.gaps = [];
+  // Tahap 0b (langkah 1): analisis dan audit kesenjangan, kelemahan, risiko (JSON internal).
+  // Dilewati bila pemanggil sudah menyuntik gaps hasil pre-flight /api/clarify.
+  if (Array.isArray(seededGaps)) {
+    outcome.gaps = seededGaps;
+  } else {
+    emit("stage_start", { stage: 0, name: STAGE_LABELS[0] });
+    const s0b = await callWithRetry({
+      cfg,
+      model: cfg.modelSmall,
+      messages: stage0bMessages(idea, outcome.analysis),
+      signal,
+    });
+    account(0, s0b.attempts);
+    emit("stage_end", { stage: 0 });
+    if (signal?.aborted) return outcome;
+    if (s0b.ok) {
+      const stage0b = parseStage0b(s0b.text);
+      // Analisis mendalam (0a) TIDAK ditimpa ringkasan 0b: ringkasan hanya dipakai
+      // bila 0a kosong. Mencegah hilangnya kedalaman analisis di dokumen hilir.
+      if (outcome.analysis.trim().length === 0 && stage0b.analysis.length > 0) {
+        outcome.analysis = stage0b.analysis;
+      }
+      outcome.gaps = stage0b.gaps;
+    } else {
+      // Gagal parse/LLM -> tanpa gaps; lanjut dengan analisis mentah.
+      outcome.gaps = [];
+    }
   }
 
   // Tahap 1 (langkah 1): analisis mendalam kebutuhan - tech, bahasa, database, arsitektur, keamanan
-  emit("stage_start", { stage: 1, name: "Langkah 1: Analisis Kebutuhan Secara Mendalam dan Komprehensif" });
+  emit("stage_start", { stage: 1, name: STAGE_LABELS[1] });
   const s1 = await callWithRetry({
     cfg,
     model: cfg.modelSmall,
@@ -242,7 +272,7 @@ export async function runGeneratePipeline(opts: GenerateOptions): Promise<Pipeli
   // dengan retryStage2Note) dan panggilan provider dilakukan LANGSUNG (bukan
   // callWithRetry) agar total panggilan provider <= MAX_ATTEMPTS, bukan
   // MAX_ATTEMPTS x MAX_ATTEMPTS. Fatal -> berhenti; retryable -> ronde berikutnya.
-  emit("stage_start", { stage: 2, name: "Langkah 2: Pengambilan Skill dan Kapabilitas Agent yang Relevan" });
+  emit("stage_start", { stage: 2, name: STAGE_LABELS[2] });
   let recommendations: DocName[] = [];
   let recOk = false;
   let s2Attempts = 0;
@@ -302,7 +332,7 @@ export async function runGeneratePipeline(opts: GenerateOptions): Promise<Pipeli
   for (const doc of stage3Docs) {
     if (signal?.aborted) return outcome;
     lastStage = 3;
-    emit("stage_start", { stage: 3, name: "Penulisan Draf Dokumen" });
+    emit("stage_start", { stage: 3, name: STAGE_LABELS[3] });
     const s3 = await callWithRetry({
       cfg,
       model: cfg.modelStrong,
@@ -323,7 +353,7 @@ export async function runGeneratePipeline(opts: GenerateOptions): Promise<Pipeli
   // Tahap 4: Task breakdown (TASK-LIST)
   if (!signal?.aborted) {
     lastStage = 4;
-    emit("stage_start", { stage: 4, name: "Langkah 3: Penyusunan Task List" });
+    emit("stage_start", { stage: 4, name: STAGE_LABELS[4] });
     const s4 = await callWithRetry({
       cfg,
       model: cfg.modelStrong,
@@ -460,11 +490,11 @@ export async function runVerifyDocs(opts: VerifyDocsOptions): Promise<VerifyDocs
   const { cfg, idea, scope, docs, answers, analysis, gaps, signal, emit } = opts;
   if (signal?.aborted) return { findings: [], attempts: 0 };
   if (docs.length === 0) {
-    emit("stage_start", { stage: STAGE_VERIFY, name: "Langkah 4: Verifikasi Kesesuaian Dokumen dengan Kebutuhan Pengguna" });
+    emit("stage_start", { stage: STAGE_VERIFY, name: STAGE_LABELS[STAGE_VERIFY] });
     emit("stage_end", { stage: STAGE_VERIFY });
     return { findings: [], attempts: 0 };
   }
-  emit("stage_start", { stage: STAGE_VERIFY, name: "Langkah 4: Verifikasi Kesesuaian Dokumen dengan Kebutuhan Pengguna" });
+  emit("stage_start", { stage: STAGE_VERIFY, name: STAGE_LABELS[STAGE_VERIFY] });
   const res = await callWithRetry({
     cfg,
     model: cfg.modelStrong,
@@ -491,11 +521,11 @@ export async function runHackerAudit(opts: HackerAuditOptions): Promise<VerifyDo
   const { cfg, idea, docs, analysis, gaps, signal, emit } = opts;
   if (signal?.aborted) return { findings: [], attempts: 0 };
   if (docs.length === 0) {
-    emit("stage_start", { stage: STAGE_HACKER, name: "Langkah 5: Audit Red-Team oleh Agent Hacker" });
+    emit("stage_start", { stage: STAGE_HACKER, name: STAGE_LABELS[STAGE_HACKER] });
     emit("stage_end", { stage: STAGE_HACKER });
     return { findings: [], attempts: 0 };
   }
-  emit("stage_start", { stage: STAGE_HACKER, name: "Langkah 5: Audit Red-Team oleh Agent Hacker" });
+  emit("stage_start", { stage: STAGE_HACKER, name: STAGE_LABELS[STAGE_HACKER] });
   const res = await callWithRetry({
     cfg,
     model: cfg.modelStrong,
@@ -534,7 +564,7 @@ const SEVERITY_RANK: Record<string, number> = { CRITICAL: 0, HIGH: 1, MEDIUM: 2,
 export async function runRepairDocs(opts: RepairDocsOptions): Promise<RepairDocsResult> {
   const { cfg, idea, scope, docs, findings, answers, analysis, gaps, signal, emit, memoryDigest } = opts;
   const updated: GeneratedDoc[] = docs.map((d) => ({ ...d }));
-  const repairStageStart = (): void => emit("stage_start", { stage: STAGE_REPAIR, name: "Langkah 6: Perbaikan Kesenjangan dan Kelemahan" });
+  const repairStageStart = (): void => emit("stage_start", { stage: STAGE_REPAIR, name: STAGE_LABELS[STAGE_REPAIR] });
   const repairStageEnd = (): void => emit("stage_end", { stage: STAGE_REPAIR });
   if (signal?.aborted) return { docs: updated, repaired: [], attempts: 0 };
   // Tanpa temuan: stage 7 tetap di-emit seimbang agar chip hijau saat pipeline tuntas.
@@ -576,7 +606,7 @@ export async function runRepairDocs(opts: RepairDocsOptions): Promise<RepairDocs
     const notes = (byDoc.get(doc) ?? []).map(
       (f: AuditFinding) => `[${(f.severity ?? "MEDIUM").toUpperCase()}] ${f.doc}: ${f.masalah}${f.saran ? ` -> ${f.saran}` : ""}`,
     );
-    emit("stage_start", { stage: STAGE_REPAIR, name: `Langkah 6: Perbaikan ${doc}` });
+    emit("stage_start", { stage: STAGE_REPAIR, name: `${STAGE_LABELS[STAGE_REPAIR]} - ${doc}` });
     // FIX TASK-LIST: jangan pakai repairDocMessages/stage3Messages untuk TASK-LIST.
     // DOC_GUIDES["TASK-LIST"].sections berisi teks "Tidak dipakai pada tahap
     // penulisan dokumen..." yang akan terkirim sebagai section LITERAL (sampah),
@@ -649,7 +679,7 @@ export async function runFinalWrite(opts: FinalWriteOptions): Promise<FinalWrite
       ? [...base, "TASK-LIST"]
       : base;
   if (targets.length === 0) {
-    finalStageStart("Langkah 7: Penulisan Dokumen");
+    finalStageStart(STAGE_LABELS[STAGE_FINAL_WRITE]);
     finalStageEnd();
     return { docs: updated, attempts: 0 };
   }
@@ -662,7 +692,7 @@ export async function runFinalWrite(opts: FinalWriteOptions): Promise<FinalWrite
       .map(
         (f: AuditFinding) => `[${(f.severity ?? "MEDIUM").toUpperCase()}] ${f.doc}: ${f.masalah}${f.saran ? ` -> ${f.saran}` : ""} (sudah diperbaiki pada tahap 6; pastikan tercakup lengkap dan konsisten)`,
       );
-    emit("stage_start", { stage: STAGE_FINAL_WRITE, name: `Langkah 7: Penulisan Dokumen ${doc}` });
+    emit("stage_start", { stage: STAGE_FINAL_WRITE, name: `${STAGE_LABELS[STAGE_FINAL_WRITE]} - ${doc}` });
     // TASK-LIST memakai prompt task breakdown (stage 4) dengan ISI dokumen terkini
     // (tanpa TASK-LIST sendiri), bukan repairDocMessages - DOC_GUIDES TASK-LIST
     // sengaja kosong karena TASK-LIST tak pernah ditulis lewat template dokumen umum.
@@ -708,7 +738,7 @@ export interface RegenerateOptions {
 /** Regenerate satu dokumen (stateless): body membawa konteks tahap 1 & 2 dari client. */
 export async function runRegenerateDoc(opts: RegenerateOptions): Promise<GeneratedDoc | FailedDoc> {
   const { cfg, idea, scope, doc, docs, answers, analysis, gaps, signal, emit, memoryDigest } = opts;
-  emit("stage_start", { stage: doc === "TASK-LIST" ? 4 : 3, name: doc === "TASK-LIST" ? "Langkah 3: Penyusunan Task List" : "Penulisan Draf Dokumen" });
+  emit("stage_start", { stage: doc === "TASK-LIST" ? 4 : 3, name: STAGE_LABELS[doc === "TASK-LIST" ? 4 : 3] });
   const messages: ChatMessage[] =
     doc === "TASK-LIST"
       ? stage4Messages(
@@ -791,9 +821,12 @@ export async function runClarify(opts: ClarifyOptions): Promise<ClarifyResult> {
     if (!s0b.ok) return fallback();
     const parsed = parseStage0b(s0b.text);
     if (parsed.questions.length === 0) return fallback();
+    // analysis yang dikembalikan = hasil 0a yang MENDALAM (identik dengan yang
+    // dihitung runGeneratePipeline), bukan ringkasan pendek 0b. Nilai ini dipakai
+    // sebagai seed sehingga stage 0a+0b tidak dihitung dua kali.
     return {
       questions: parsed.questions,
-      analysis: parsed.analysis.length > 0 ? parsed.analysis : analysis.slice(0, 500),
+      analysis: analysis,
       gaps: parsed.gaps,
     };
   } catch (e) {

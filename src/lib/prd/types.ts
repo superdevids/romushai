@@ -18,6 +18,23 @@ export const DOC_NAMES = [
 
 export type DocName = (typeof DOC_NAMES)[number];
 
+/**
+ * Label resmi per stage SSE (satu sumber kebenaran: server emit + chip UI).
+ * Penomoran "Langkah" adalah kontrak produk: stage 0a/0b/1 = Langkah 1;
+ * draf dokumen & task list berbagi Langkah 3; finalisasi = Langkah 7.
+ */
+export const STAGE_LABELS: Record<number, string> = {
+  0: "Langkah 1: Analisis Kebutuhan Secara Mendalam dan Komprehensif",
+  1: "Langkah 1: Analisis Kebutuhan Secara Mendalam dan Komprehensif",
+  2: "Langkah 2: Pengambilan Skill dan Kapabilitas Agent yang Relevan",
+  3: "Langkah 3: Penulisan Draf Dokumen",
+  4: "Langkah 3: Penyusunan Task List",
+  5: "Langkah 4: Verifikasi Kesesuaian Dokumen dengan Kebutuhan Pengguna",
+  6: "Langkah 5: Audit Red-Team oleh Agent Hacker",
+  7: "Langkah 6: Perbaikan Kesenjangan dan Kelemahan",
+  8: "Langkah 7: Finalisasi Dokumen",
+};
+
 /** Kategori baku pertanyaan klarifikasi (dipakai parser + prompt + UI). */
 export const QUESTION_CATEGORIES = [
   "Cakupan",

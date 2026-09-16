@@ -4,6 +4,9 @@
   "functions": {
     "src/app/api/generate/route.ts": { "maxDuration": 300 },
     "src/app/api/clarify/route.ts": { "maxDuration": 300 },
-    "src/app/api/regenerate-doc/route.ts": { "maxDuration": 300 }
+    "src/app/api/regenerate-doc/route.ts": { "maxDuration": 300 },
+    "src/app/api/jobs/route.ts": { "maxDuration": 300 },
+    "src/app/api/jobs/regenerate/route.ts": { "maxDuration": 300 },
+    "src/app/api/jobs/[id]/events/route.ts": { "maxDuration": 300 }
   }
 }

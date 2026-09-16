@@ -28,9 +28,15 @@ const SECURITY_HEADERS = [
   { key: "Strict-Transport-Security", value: "max-age=63072000; includeSubDomains" },
 ];
 
+// Origin dev tambahan (opsional, mis. akses via IP LAN) dipasok lewat env agar
+// tidak ada alamat pribadi yang ter-commit: DEV_ORIGINS="192.168.1.10,10.0.0.5".
+const devOrigins = (process.env.DEV_ORIGINS ?? "")
+  .split(",")
+  .map((s) => s.trim())
+  .filter((s) => s.length > 0);
+
 const nextConfig: NextConfig = {
-	/* config options here */
-	allowedDevOrigins: ["192.168.110.133"],
+	...(devOrigins.length > 0 ? { allowedDevOrigins: devOrigins } : {}),
 	async headers() {
 		return [{ source: "/:path*", headers: SECURITY_HEADERS }];
 	},

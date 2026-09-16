@@ -5,7 +5,17 @@ import type { ClarifyQuestion, DocName, FailedDoc, GeneratedDoc } from "@/lib/pr
 import { loadHistory as readHistory, deleteHistory as removeStoredHistory, saveHistory as storeHistory, type HistoryRecord } from "@/lib/history";
 import { mirrorDoneMemory } from "@/lib/memory-client";
 import { derivePreview, deriveProjectName, downloadDoc, MAX_IDEA_LENGTH } from "@/lib/format";
-import { readSse, type SseEventMap } from "@/lib/prd/sse-client";
+import { type SseEventMap } from "@/lib/prd/sse-client";
+import {
+  createJob as createJobRequest,
+  createRegenerateJob,
+  cancelJob,
+  loadActiveJob,
+  markJobProcessed,
+  saveActiveJob,
+  streamJob,
+  type ActiveJob,
+} from "@/lib/prd/job-client";
 import { ThreadHeaderV2 } from "@/components/ThreadHeader";
 import { Hero } from "@/components/Hero";
 import { ComposerFixedBottom } from "@/components/Composer";
@@ -52,6 +62,9 @@ export default function PrdPage() {
 	const scopeRef = useRef("");
 	const copyTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
 	const abortRef = useRef<AbortController | null>(null);
+	// JobId generate yang aktif di SERVER (pipeline jalan lepas dari koneksi tab).
+	const activeJobRef = useRef<ActiveJob | null>(null);
+	const resumeAttemptedRef = useRef(false);
 	// Controller terpisah untuk /api/clarify: klik "Chat Baru" saat clarify in-flight
 	// harus membatalkan request dan mengabaikan respons basi.
 	const clarifyAbortRef = useRef<AbortController | null>(null);
@@ -111,6 +124,19 @@ export default function PrdPage() {
 		docsRef.current = docs;
 	}, [docs]);
 
+	// Reconnect: bila ada job generate aktif saat halaman dibuka (mis. tab sempat
+	// ditutup/suspend), sambungkan lagi stream-nya dari cursor tersimpan. Pipeline
+	// TIDAK dimulai ulang: hasil replay (chunk di-coalesce) identik dengan stream lama.
+	// Dijalankan DEFERRED (setTimeout 0) via ref: mengikuti pola tema/history agar
+	// React Compiler tidak melihat setState sinkron dalam effect.
+	const reconnectRef = useRef<() => void>(() => undefined);
+	useEffect(() => {
+		if (resumeAttemptedRef.current) return;
+		resumeAttemptedRef.current = true;
+		const timer = setTimeout(() => reconnectRef.current(), 0);
+		return () => clearTimeout(timer);
+	}, []);
+
 	useEffect(() => {
 		return () => {
 			if (copyTimer.current) clearTimeout(copyTimer.current);
@@ -169,7 +195,7 @@ export default function PrdPage() {
 	}, []);
 
 	const runPipeline = useCallback(
-		async (text: string, ans: string[]) => {
+		async (text: string, ans: string[], attach?: ActiveJob | null, seed?: { analysis: string; gaps: string[] }) => {
 			abortRef.current?.abort();
 			const controller = new AbortController();
 			abortRef.current = controller;
@@ -192,17 +218,32 @@ export default function PrdPage() {
 			resumeRef.current = null;
 			setResume(null);
 
+			// Buffer kumulatif per-run: reconnect melakukan REPLAY dari event 0, jadi
+			// teks harus di-set ulang (bukan ditambah) agar tidak duplikat.
+			// Disimpan di REF (bukan let lokal) agar React Compiler bisa melacak
+			// identitas mutable yang diakses handler SSE/asinkron.
+			const scopeBufRef = { current: "" };
+			const assistantBufRef = { current: "" };
+			const docBuf = new Map<DocName, string>();
+			const jobIdRef = { current: "" };
+
 			const handlers: { [K in keyof SseEventMap]: (d: SseEventMap[K]) => void } = {
 				stage_start: ({ stage }) => {
 					setStageStatus((prev) => ({ ...prev, [stage]: "active" }));
 				},
-				chunk: ({ stage, doc, text }) => {
-					if (stage === 1) scopeRef.current += text;
+				chunk: ({ stage, doc, text: t }) => {
+					if (stage === 1) {
+						scopeBufRef.current += t;
+						scopeRef.current = scopeBufRef.current;
+					}
 					if (doc) {
-						setStreaming((prev) => ({ doc, text: (prev?.doc === doc ? prev.text : "") + text }));
+						const acc = (docBuf.get(doc) ?? "") + t;
+						docBuf.set(doc, acc);
+						setStreaming({ doc, text: acc });
 					} else {
+						assistantBufRef.current += t;
+						setAssistantText(assistantBufRef.current);
 						setStreaming(null);
-						setAssistantText((prev) => prev + text);
 					}
 				},
 				stage_end: ({ stage }) => {
@@ -234,9 +275,14 @@ export default function PrdPage() {
 					// JANGAN null-kan streaming di sini: Thread.tsx memakai teks terakhir sebagai
 					// ekor tampilan sampai typewriter selesai flush; reset terjadi saat run baru mulai.
 					markStagesDone();
+					// Job selesai: berhenti ditawarkan sebagai job aktif untuk reconnect.
+					saveActiveJob(null);
+					// Guard replay: event "done" bisa terkirim ulang saat reconnect; riwayat
+					// dan memori hanya boleh dicatat SEKALI per job.
+					if (!markJobProcessed(jobIdRef.current)) return;
 					if (d.length > 0) {
 						saveHistory({
-							id: String(Date.now()),
+							id: jobIdRef.current || String(Date.now()),
 							title: deriveProjectName(d),
 							timestamp: Date.now(),
 							taskCount: tc,
@@ -256,30 +302,48 @@ export default function PrdPage() {
 			};
 
 			try {
-				const res = await fetch("/api/generate", {
-					method: "POST",
-					headers: { "Content-Type": "application/json" },
-					body: JSON.stringify({ idea: text, answers: ans }),
-					signal: controller.signal,
-				});
-				if (!res.ok) {
-					const payload = (await res.json().catch(() => null)) as { error?: string } | null;
-					setErrorMsg(payload?.error ?? `Gagal memulai generasi (HTTP ${res.status}).`);
-					setStreaming(null);
+				// Job hanya dibuat BILA belum ada: reconnect memakai job yang sudah jalan
+				// di server, jadi pipeline tidak pernah dijalankan dua kali.
+			if (attach) {
+					jobIdRef.current = attach.jobId;
+					// PENTING: resume mount selalu replay dari cursor 0. Buffer teks kumulatif
+					// (scope/assistant) dimulai kosong di run ini, jadi replay parsial
+					// (dari cursor tersimpan) akan menghasilkan teks terpotong.
+					attach = null;
 				} else {
-					const result = await readSse(res, handlers);
-					if (abortRef.current !== controller) return; // run sudah digantikan; jangan sentuh state
-					const received = new Set(docsRef.current.map((d) => d.name));
-					const missing = planRef.current.filter((p) => !received.has(p));
-					if (result.completed && missing.length === 0) {
-						// Selesai normal: bersihkan resume + error basi.
-						resumeRef.current = null;
-						setResume(null);
-					} else if (missing.length > 0) {
-						// Stream terputus / budget habis sebelum semua dokumen: tawarkan resume.
-						resumeRef.current = missing;
-						setResume(missing);
-					}
+					jobIdRef.current = await createJobRequest(text, ans, controller.signal, seed);
+				}
+				if (abortRef.current !== controller) return;
+				const active: ActiveJob = { jobId: jobIdRef.current, kind: "generate", createdAt: Date.now(), cursor: 0, idea: text, answers: ans };
+				activeJobRef.current = active;
+				saveActiveJob(active);
+
+				const result = await streamJob({
+					jobId: jobIdRef.current,
+					handlers,
+					signal: controller.signal,
+					// Selalu replay dari 0 di awal run: buffer kumulatif di atas
+					// dibangun dari awal setiap kali, jadi tidak ada potongan teks.
+					onCursor: (c) => {
+						const current = activeJobRef.current;
+						if (current && current.jobId === jobIdRef.current) {
+							activeJobRef.current = { ...current, cursor: c };
+							saveActiveJob(activeJobRef.current);
+						}
+					},
+				});
+				if (abortRef.current !== controller) return; // run sudah digantikan; jangan sentuh state
+				const received = new Set(docsRef.current.map((d) => d.name));
+				const missing = planRef.current.filter((p) => !received.has(p));
+				if (result.completed && missing.length === 0) {
+					// Selesai normal: bersihkan resume + error basi.
+					resumeRef.current = null;
+					setResume(null);
+					saveActiveJob(null);
+				} else if (missing.length > 0) {
+					// Job berhenti (budget/abort) sebelum semua dokumen: tawarkan resume.
+					resumeRef.current = missing;
+					setResume(missing);
 				}
 			} catch (e) {
 				if (e instanceof Error && e.name === "AbortError") {
@@ -300,6 +364,27 @@ export default function PrdPage() {
 		},
 		[markStagesDone, saveHistory],
 	);
+
+	// Isi callback reconnect SETELAH runPipeline ada: efek mount (di atas) hanya
+	// memanggilnya lewat ref, sehingga tidak ada akses variabel sebelum deklarasi
+	// dan tidak ada setState sinkron di dalam effect.
+	useEffect(() => {
+		reconnectRef.current = (): void => {
+			const stored = loadActiveJob();
+			if (!stored || stored.kind !== "generate") return;
+			// Stale guard: job server TTL 1 jam; entri lebih tua dari itu tidak valid.
+			if (Date.now() - stored.createdAt > 60 * 60_000) {
+				saveActiveJob(null);
+				return;
+			}
+			if (!stored.idea || stored.idea.length === 0) return;
+			activeJobRef.current = stored;
+			setHasRun(true);
+			setSentIdea(stored.idea);
+			if (stored.answers) setAnswers(stored.answers);
+			void runPipeline(stored.idea, stored.answers ?? [], stored);
+		};
+	}, [runPipeline]);
 
 	const runGenerate = useCallback(
 		async (override?: string) => {
@@ -322,6 +407,9 @@ export default function PrdPage() {
 			setBusy(true);
 			analysisRef.current = "";
 			gapsRef.current = [];
+			// Seed pre-flight: dipakai agar pipeline tidak menghitung stage 0a/0b dua kali.
+			const seed = (): { analysis: string; gaps: string[] } | undefined =>
+				analysisRef.current.length > 0 ? { analysis: analysisRef.current, gaps: gapsRef.current } : undefined;
 			try {
 				const res = await fetch("/api/clarify", {
 					method: "POST",
@@ -347,10 +435,10 @@ export default function PrdPage() {
 					setAnswers(questions.map((q) => q.recommended));
 					return;
 				}
-				await runPipeline(text, []);
+				await runPipeline(text, [], null, seed());
 			} catch (e) {
 				if (e instanceof Error && e.name === "AbortError") return;
-				await runPipeline(text, []);
+				await runPipeline(text, [], null, seed());
 			} finally {
 				if (clarifyAbortRef.current === clarifyController) clarifyAbortRef.current = null;
 				// runPipeline mengatur busyRef sendiri; hanya bersihkan bila tidak ada run aktif
@@ -380,12 +468,18 @@ export default function PrdPage() {
 		setCompletedClarify(done);
 		completedClarifyRef.current = done;
 		setClarify(null);
-		void runPipeline(text, answers);
+		// Seed pre-flight diteruskan: stage 0a/0b tidak dihitung ulang di server.
+		const seed =
+			analysisRef.current.length > 0 ? { analysis: analysisRef.current, gaps: gapsRef.current } : undefined;
+		void runPipeline(text, answers, null, seed);
 	}, [clarify, answers, sentIdea, runPipeline]);
 
 	const retryGenerate = useCallback(() => {
 		if (!sentIdea || busyRef.current) return;
-		void runPipeline(sentIdea, answers);
+		// Seed pre-flight tetap diteruskan: retry tidak membayar stage 0a/0b lagi.
+		const seed =
+			analysisRef.current.length > 0 ? { analysis: analysisRef.current, gaps: gapsRef.current } : undefined;
+		void runPipeline(sentIdea, answers, null, seed);
 	}, [sentIdea, answers, runPipeline]);
 
 	const runRegenerate = useCallback(
@@ -458,22 +552,13 @@ export default function PrdPage() {
 			};
 
 			try {
-				const res = await fetch("/api/regenerate-doc", {
-					method: "POST",
-					headers: { "Content-Type": "application/json" },
-					body: JSON.stringify(body),
-					signal: controller.signal,
-				});
-				if (!res.ok) {
-					const payload = (await res.json().catch(() => null)) as { error?: string } | null;
-					setErrorMsg(payload?.error ?? `Gagal regenerate (HTTP ${res.status}).`);
-					setStreaming(null);
-				} else {
-					const result = await readSse(res, handlers);
-					if (abortRef.current !== controller) return; // run sudah digantikan
-					if (result.completed) setErrorMsg(null);
-					else setStreaming(null);
-				}
+				// Job regenerate juga berjalan di server: aman ditutup tab di tengah jalan.
+				const jobId = await createRegenerateJob(body, controller.signal);
+				if (abortRef.current !== controller) return;
+				const result = await streamJob({ jobId, handlers, signal: controller.signal });
+				if (abortRef.current !== controller) return; // run sudah digantikan
+				if (result.completed) setErrorMsg(null);
+				else setStreaming(null);
 			} catch (e) {
 				if (e instanceof Error && e.name === "AbortError") {
 					// Abort oleh run baru: jangan sentuh streaming (milik run baru).
@@ -553,6 +638,12 @@ export default function PrdPage() {
 		abortRef.current = null;
 		clarifyAbortRef.current?.abort();
 		clarifyAbortRef.current = null;
+		// Chat baru = user benar-benar meninggalkan run: hentikan job di server
+		// agar tidak memakan budget/model call lagi, lalu hapus jejak reconnect.
+		const job = activeJobRef.current;
+		if (job) void cancelJob(job.jobId);
+		activeJobRef.current = null;
+		saveActiveJob(null);
 		// Run dibatalkan paksa: guard finally run lama tidak jalan, reset manual di sini.
 		busyRef.current = false;
 		setBusy(false);

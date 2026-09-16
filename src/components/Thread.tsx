@@ -4,23 +4,14 @@ import { useEffect, useMemo, useRef, useState, type RefObject } from "react";
 import Markdown from "react-markdown";
 import { Sparkles, Loader2, RefreshCw, AlertTriangle } from "lucide-react";
 import type { ClarifyQuestion, DocName, FailedDoc, GeneratedDoc } from "@/lib/prd/types";
+import { STAGE_LABELS } from "@/lib/prd/types";
 import { docFileName } from "@/lib/format";
 import { ClarifyCards } from "./ClarifyCards";
 import { DocBubble, ErrorBubble, FailedDocBubble } from "./DocBubble";
 
 export type StageStatus = "idle" | "active" | "done";
 
-const STAGE_NAMES: Record<number, string> = {
-	0: "Langkah 1: Analisis Kebutuhan Secara Mendalam dan Komprehensif",
-	1: "Langkah 1: Analisis Kebutuhan Secara Mendalam dan Komprehensif",
-	2: "Langkah 2: Pengambilan Skill dan Kapabilitas Agent yang Relevan",
-	3: "Langkah 3: Penulisan Draf Dokumen",
-	4: "Langkah 4: Penyusunan Task List",
-	5: "Langkah 5: Verifikasi Kesesuaian Dokumen dengan Kebutuhan Pengguna",
-	6: "Langkah 6: Audit Red-Team oleh Agent Hacker",
-	7: "Langkah 7: Perbaikan Kesenjangan dan Kelemahan",
-	8: "Langkah 8: Finalisasi Dokumen",
-};
+const STAGE_NAMES: Record<number, string> = STAGE_LABELS;
 
 export function UserBubble({ text }: { text: string }) {
 	return (

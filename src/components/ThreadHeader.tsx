@@ -4,7 +4,7 @@ import { Plus, History, Home } from "lucide-react";
 import { LogoMark, Wordmark } from "./BrandLogo";
 import Link from "next/link";
 
-export function ThreadHeaderV2({ subBrand, historyCount, hasContent, isDark, historyOpen, onOpenHistory, onNewChat, onToggleTheme }: { subBrand: string; historyCount: number; hasContent: boolean; isDark: boolean | null; historyOpen: boolean; onOpenHistory: () => void; onNewChat: () => void; onToggleTheme: () => void }) {
+export function ThreadHeaderV2({ subBrand, historyCount, hasContent, historyOpen, onOpenHistory, onNewChat }: { subBrand: string; historyCount: number; hasContent: boolean; isDark: boolean | null; historyOpen: boolean; onOpenHistory: () => void; onNewChat: () => void; onToggleTheme: () => void }) {
 	return (
 		<header
 			role="banner"
